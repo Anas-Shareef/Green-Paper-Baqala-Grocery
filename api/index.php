@@ -16,13 +16,6 @@ try {
         }
     }
 
-    // Ensure config caching is disabled so Laravel always loads config files dynamically
-    $cacheVars = ['APP_CONFIG_CACHE', 'APP_EVENTS_CACHE', 'APP_PACKAGES_CACHE', 'APP_ROUTES_CACHE', 'APP_SERVICES_CACHE'];
-    foreach ($cacheVars as $var) {
-        putenv($var);
-        unset($_ENV[$var], $_SERVER[$var]);
-    }
-
     // Mandatory Environment Variables for Vercel serverless execution
     $forcedEnv = [
         'APP_STORAGE' => $tmpStorage,
