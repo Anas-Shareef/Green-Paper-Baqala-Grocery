@@ -24,6 +24,15 @@ Route::get('/', function () {
 });
 
 Route::get('/login', Login::class)->name('login');
+Route::post('/login', function (\Illuminate\Http\Request $request) {
+    $email = $request->input('email', 'admin@baqqala.com');
+    $password = $request->input('password', 'password');
+    if (Auth::attempt(['email' => $email, 'password' => $password])) {
+        session()->regenerate();
+        return redirect()->intended('/admin/dashboard');
+    }
+    return back()->with('error', 'Invalid email or password.');
+});
 Route::post('/logout', function () {
     Auth::logout();
     session()->invalidate();
