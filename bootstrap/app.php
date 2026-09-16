@@ -18,6 +18,7 @@ $app = Application::configure(basePath: dirname(__DIR__))
             'livewire*',
             'livewire/*',
             'livewire-*',
+            '*livewire*',
             'login',
         ]);
     })

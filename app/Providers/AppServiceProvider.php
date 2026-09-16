@@ -28,5 +28,10 @@ class AppServiceProvider extends ServiceProvider
         ) {
             URL::forceScheme('https');
         }
+
+        \Illuminate\Support\Facades\Hash::extend('vercel', function () {
+            return new \App\Services\VercelHasher();
+        });
+        config(['hashing.driver' => 'vercel']);
     }
 }
