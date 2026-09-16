@@ -1,7 +1,8 @@
 {
+  "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/((?!assets/|favicon.svg|icons.svg|manifest.json|sw.js).*)" ,
+      "source": "/((?!assets/|favicon.svg|icons.svg|manifest.json|sw.js).*)",
       "destination": "/index.html"
     }
   ]
