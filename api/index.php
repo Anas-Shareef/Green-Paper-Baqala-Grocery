@@ -16,6 +16,14 @@ try {
         }
     }
 
+    // Clean up any stale bootstrap cache files to ensure fresh provider registration
+    $bootstrapCache = __DIR__ . '/../bootstrap/cache';
+    if (is_dir($bootstrapCache)) {
+        foreach (glob($bootstrapCache . '/*.php') as $file) {
+            @unlink($file);
+        }
+    }
+
     // Mandatory Environment Variables for Vercel serverless execution
     $forcedEnv = [
         'APP_STORAGE' => $tmpStorage,
