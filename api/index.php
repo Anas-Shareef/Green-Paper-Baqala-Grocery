@@ -15,22 +15,27 @@ foreach ($directories as $dir) {
     }
 }
 
-// Copy SQLite database to /tmp if not present
-$sqliteSource = __DIR__ . '/../database/database.sqlite';
-$sqliteTmp = '/tmp/database.sqlite';
+// Check if database is configured via environment variables (e.g. Supabase PostgreSQL)
+$dbConnection = getenv('DB_CONNECTION') ?: ($_ENV['DB_CONNECTION'] ?? 'sqlite');
 
-if (!file_exists($sqliteTmp)) {
-    if (file_exists($sqliteSource)) {
-        @copy($sqliteSource, $sqliteTmp);
-    } else {
-        @touch($sqliteTmp);
+if ($dbConnection === 'sqlite') {
+    $sqliteSource = __DIR__ . '/../database/database.sqlite';
+    $sqliteTmp = '/tmp/database.sqlite';
+
+    if (!file_exists($sqliteTmp)) {
+        if (file_exists($sqliteSource)) {
+            @copy($sqliteSource, $sqliteTmp);
+        } else {
+            @touch($sqliteTmp);
+        }
     }
+
+    $_ENV['DB_DATABASE'] = $sqliteTmp;
 }
 
-// Override storage & database paths for serverless
+// Override storage path for serverless
 $_ENV['APP_STORAGE'] = $tmpStorage;
 $_ENV['VIEW_COMPILED_PATH'] = $tmpStorage . '/framework/views';
-$_ENV['DB_DATABASE'] = $sqliteTmp;
 
 // Forward request to Laravel public index
 require __DIR__ . '/../public/index.php';
