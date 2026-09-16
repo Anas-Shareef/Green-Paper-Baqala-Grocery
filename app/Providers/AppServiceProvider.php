@@ -19,6 +19,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        if (
+            env('APP_ENV') === 'production' ||
+            (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') ||
+            getenv('HTTPS') === 'on' ||
+            (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
+        ) {
+            URL::forceScheme('https');
+        }
     }
 }

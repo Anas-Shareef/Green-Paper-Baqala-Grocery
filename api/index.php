@@ -48,6 +48,8 @@ try {
         'DB_CONNECTION' => 'sqlite',
         'APP_MAINTENANCE_DRIVER' => 'file',
         'APP_MAINTENANCE_STORE' => 'array',
+        'HTTPS' => 'on',
+        'HTTP_X_FORWARDED_PROTO' => 'https',
         'APP_KEY' => getenv('APP_KEY') ?: 'base64:yH6b2N0U9aL/JgK/sX1u2v3w4x5y6z7A8B9C0D1E2F3=',
     ];
 
