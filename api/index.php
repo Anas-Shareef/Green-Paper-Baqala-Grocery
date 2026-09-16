@@ -67,7 +67,13 @@ try {
 } catch (\Throwable $e) {
     http_response_code(500);
     echo "<h1>Baqqala Serverless Diagnostics</h1>";
-    echo "<p><strong>Message:</strong> " . htmlspecialchars($e->getMessage()) . "</p>";
-    echo "<p><strong>File:</strong> " . htmlspecialchars($e->getFile()) . ":" . $e->getLine() . "</p>";
-    echo "<pre>" . htmlspecialchars($e->getTraceAsString()) . "</pre>";
+    $orig = $e->getPrevious() ?: $e;
+    echo "<p><strong>Original Error:</strong> " . htmlspecialchars($orig->getMessage()) . "</p>";
+    echo "<p><strong>File:</strong> " . htmlspecialchars($orig->getFile()) . ":" . $orig->getLine() . "</p>";
+    echo "<pre>" . htmlspecialchars($orig->getTraceAsString()) . "</pre>";
+    if ($e->getPrevious()) {
+        echo "<h2>Outer Wrapper Exception</h2>";
+        echo "<p><strong>Wrapper Message:</strong> " . htmlspecialchars($e->getMessage()) . "</p>";
+        echo "<pre>" . htmlspecialchars($e->getTraceAsString()) . "</pre>";
+    }
 }
