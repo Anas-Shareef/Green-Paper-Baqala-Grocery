@@ -1,7 +1,7 @@
 <?php
 
 try {
-    // Prepare writable paths for Vercel serverless environment (/tmp)
+    // 1. Prepare writable paths for Vercel serverless environment (/tmp)
     $tmpStorage = '/tmp/storage';
     $directories = [
         $tmpStorage . '/framework/views',
@@ -29,14 +29,22 @@ try {
     $_ENV['VIEW_COMPILED_PATH'] = $tmpStorage . '/framework/views';
     $_SERVER['VIEW_COMPILED_PATH'] = $tmpStorage . '/framework/views';
 
-    // Database connection handling
+    // 2. Database connection & Auto Fallback handling
     $dbConnection = getenv('DB_CONNECTION') ?: ($_ENV['DB_CONNECTION'] ?? 'sqlite');
+
+    // If pgsql driver is requested but not installed in serverless PHP, fallback to SQLite
+    if ($dbConnection === 'pgsql' && !extension_loaded('pdo_pgsql')) {
+        $dbConnection = 'sqlite';
+        putenv('DB_CONNECTION=sqlite');
+        $_ENV['DB_CONNECTION'] = 'sqlite';
+        $_SERVER['DB_CONNECTION'] = 'sqlite';
+    }
 
     if ($dbConnection === 'sqlite') {
         $sqliteSource = __DIR__ . '/../database/database.sqlite';
         $sqliteTmp = '/tmp/database.sqlite';
 
-        if (!file_exists($sqliteTmp)) {
+        if (!file_exists($sqliteTmp) || filesize($sqliteTmp) < 100) {
             if (file_exists($sqliteSource)) {
                 @copy($sqliteSource, $sqliteTmp);
             } else {
@@ -53,7 +61,7 @@ try {
     require __DIR__ . '/../public/index.php';
 } catch (\Throwable $e) {
     http_response_code(500);
-    echo "<h1>Laravel Server Error</h1>";
+    echo "<h1>Baqqala Serverless Diagnostics</h1>";
     echo "<p><strong>Message:</strong> " . htmlspecialchars($e->getMessage()) . "</p>";
     echo "<p><strong>File:</strong> " . htmlspecialchars($e->getFile()) . ":" . $e->getLine() . "</p>";
     echo "<pre>" . htmlspecialchars($e->getTraceAsString()) . "</pre>";
