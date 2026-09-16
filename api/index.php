@@ -16,50 +16,39 @@ try {
         }
     }
 
-    // Set writable storage path and log channel for serverless environment
-    putenv('APP_STORAGE=' . $tmpStorage);
-    $_ENV['APP_STORAGE'] = $tmpStorage;
-    $_SERVER['APP_STORAGE'] = $tmpStorage;
+    // Mandatory Serverless Environment Variables
+    $envVars = [
+        'APP_STORAGE' => $tmpStorage,
+        'LOG_CHANNEL' => 'stderr',
+        'VIEW_COMPILED_PATH' => $tmpStorage . '/framework/views',
+        'APP_DEBUG' => 'true',
+        'SESSION_DRIVER' => 'cookie',
+        'CACHE_STORE' => 'array',
+        'APP_KEY' => getenv('APP_KEY') ?: 'base64:yH6b2N0U9aL/JgK/sX1u2v3w4x5y6z7A8B9C0D1E2F3=',
+        'DB_CONNECTION' => 'sqlite',
+    ];
 
-    putenv('LOG_CHANNEL=stderr');
-    $_ENV['LOG_CHANNEL'] = 'stderr';
-    $_SERVER['LOG_CHANNEL'] = 'stderr';
-
-    putenv('VIEW_COMPILED_PATH=' . $tmpStorage . '/framework/views');
-    $_ENV['VIEW_COMPILED_PATH'] = $tmpStorage . '/framework/views';
-    $_SERVER['VIEW_COMPILED_PATH'] = $tmpStorage . '/framework/views';
-
-    putenv('APP_DEBUG=true');
-    $_ENV['APP_DEBUG'] = 'true';
-    $_SERVER['APP_DEBUG'] = 'true';
-
-    // 2. Database connection & Auto Fallback handling
-    $dbConnection = getenv('DB_CONNECTION') ?: ($_ENV['DB_CONNECTION'] ?? 'sqlite');
-
-    // If pgsql driver is requested but not installed in serverless PHP, fallback to SQLite
-    if ($dbConnection === 'pgsql' && !extension_loaded('pdo_pgsql')) {
-        $dbConnection = 'sqlite';
-        putenv('DB_CONNECTION=sqlite');
-        $_ENV['DB_CONNECTION'] = 'sqlite';
-        $_SERVER['DB_CONNECTION'] = 'sqlite';
+    foreach ($envVars as $key => $val) {
+        putenv("{$key}={$val}");
+        $_ENV[$key] = $val;
+        $_SERVER[$key] = $val;
     }
 
-    if ($dbConnection === 'sqlite') {
-        $sqliteSource = __DIR__ . '/../database/database.sqlite';
-        $sqliteTmp = '/tmp/database.sqlite';
+    // 2. Database Copy to /tmp
+    $sqliteSource = __DIR__ . '/../database/database.sqlite';
+    $sqliteTmp = '/tmp/database.sqlite';
 
-        if (!file_exists($sqliteTmp) || filesize($sqliteTmp) < 100) {
-            if (file_exists($sqliteSource)) {
-                @copy($sqliteSource, $sqliteTmp);
-            } else {
-                @touch($sqliteTmp);
-            }
+    if (!file_exists($sqliteTmp) || filesize($sqliteTmp) < 100) {
+        if (file_exists($sqliteSource)) {
+            @copy($sqliteSource, $sqliteTmp);
+        } else {
+            @touch($sqliteTmp);
         }
-
-        putenv('DB_DATABASE=' . $sqliteTmp);
-        $_ENV['DB_DATABASE'] = $sqliteTmp;
-        $_SERVER['DB_DATABASE'] = $sqliteTmp;
     }
+
+    putenv('DB_DATABASE=' . $sqliteTmp);
+    $_ENV['DB_DATABASE'] = $sqliteTmp;
+    $_SERVER['DB_DATABASE'] = $sqliteTmp;
 
     // Forward request to Laravel public index
     require __DIR__ . '/../public/index.php';
