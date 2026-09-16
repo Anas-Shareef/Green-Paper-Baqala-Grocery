@@ -39,7 +39,7 @@ try {
         'LOG_CHANNEL' => 'stderr',
         'VIEW_COMPILED_PATH' => $tmpStorage . '/framework/views',
         'APP_DEBUG' => 'true',
-        'SESSION_DRIVER' => 'cookie',
+        'SESSION_DRIVER' => 'file',
         'CACHE_STORE' => 'array',
         'QUEUE_CONNECTION' => 'sync',
         'FILESYSTEM_DISK' => 'local',
