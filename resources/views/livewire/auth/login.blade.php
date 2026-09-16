@@ -14,11 +14,11 @@
         </div>
         @endif
 
-        <form method="POST" action="{{ route('login') }}" wire:submit="login" class="space-y-4 text-xs">
+        <form method="POST" action="{{ route('login') }}" class="space-y-4 text-xs">
             @csrf
             <div>
                 <label class="block font-bold text-slate-300 mb-1">Email Address</label>
-                <input type="email" name="email" wire:model="email" required placeholder="admin@baqqala.com" class="w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 text-sm font-medium">
+                <input type="email" name="email" value="admin@baqqala.com" required placeholder="admin@baqqala.com" class="w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 text-sm font-medium">
             </div>
 
             <div>
