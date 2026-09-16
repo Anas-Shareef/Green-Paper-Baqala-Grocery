@@ -16,12 +16,18 @@ try {
         }
     }
 
-    // Clean up any stale bootstrap cache files to ensure fresh provider registration
-    $bootstrapCache = __DIR__ . '/../bootstrap/cache';
-    if (is_dir($bootstrapCache)) {
-        foreach (glob($bootstrapCache . '/*.php') as $file) {
-            @unlink($file);
-        }
+    // Redirect framework cache paths to /tmp to bypass read-only bootstrap/cache files
+    $cachePaths = [
+        'APP_SERVICES_CACHE' => '/tmp/services.php',
+        'APP_PACKAGES_CACHE' => '/tmp/packages.php',
+        'APP_CONFIG_CACHE' => '/tmp/config.php',
+        'APP_ROUTES_CACHE' => '/tmp/routes.php',
+        'APP_EVENTS_CACHE' => '/tmp/events.php',
+    ];
+    foreach ($cachePaths as $key => $path) {
+        putenv("{$key}={$path}");
+        $_ENV[$key] = $path;
+        $_SERVER[$key] = $path;
     }
 
     // Mandatory Environment Variables for Vercel serverless execution
