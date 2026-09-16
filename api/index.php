@@ -16,6 +16,19 @@ try {
         }
     }
 
+    // Set writable storage path and log channel for serverless environment
+    putenv('APP_STORAGE=' . $tmpStorage);
+    $_ENV['APP_STORAGE'] = $tmpStorage;
+    $_SERVER['APP_STORAGE'] = $tmpStorage;
+
+    putenv('LOG_CHANNEL=stderr');
+    $_ENV['LOG_CHANNEL'] = 'stderr';
+    $_SERVER['LOG_CHANNEL'] = 'stderr';
+
+    putenv('VIEW_COMPILED_PATH=' . $tmpStorage . '/framework/views');
+    $_ENV['VIEW_COMPILED_PATH'] = $tmpStorage . '/framework/views';
+    $_SERVER['VIEW_COMPILED_PATH'] = $tmpStorage . '/framework/views';
+
     // Database connection handling
     $dbConnection = getenv('DB_CONNECTION') ?: ($_ENV['DB_CONNECTION'] ?? 'sqlite');
 
@@ -31,12 +44,10 @@ try {
             }
         }
 
+        putenv('DB_DATABASE=' . $sqliteTmp);
         $_ENV['DB_DATABASE'] = $sqliteTmp;
+        $_SERVER['DB_DATABASE'] = $sqliteTmp;
     }
-
-    // Override storage path for serverless
-    $_ENV['APP_STORAGE'] = $tmpStorage;
-    $_ENV['VIEW_COMPILED_PATH'] = $tmpStorage . '/framework/views';
 
     // Forward request to Laravel public index
     require __DIR__ . '/../public/index.php';
