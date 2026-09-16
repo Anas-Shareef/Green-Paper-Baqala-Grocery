@@ -1,0 +1,21 @@
+{
+  "short_name": "Baqqala",
+  "name": "Baqqala — Your Everyday Grocery, Delivered",
+  "icons": [
+    {
+      "src": "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=192&h=192&q=80",
+      "type": "image/jpeg",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=512&h=512&q=80",
+      "type": "image/jpeg",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#020617",
+  "theme_color": "#0f172a",
+  "display": "standalone",
+  "orientation": "portrait"
+}

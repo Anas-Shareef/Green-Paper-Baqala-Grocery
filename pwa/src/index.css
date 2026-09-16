@@ -1,0 +1,32 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap');
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+    @apply bg-slate-50 text-slate-900 antialiased min-h-screen selection:bg-emerald-600 selection:text-white;
+  }
+}
+
+.btn-glow {
+  @apply px-4 py-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-emerald-600/20 hover:shadow-emerald-600/30 flex items-center gap-2;
+}
+
+.btn-outline {
+  @apply px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 hover:border-emerald-600 font-bold text-xs rounded-xl transition-all flex items-center gap-2;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
