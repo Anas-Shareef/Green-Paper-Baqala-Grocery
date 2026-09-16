@@ -32,6 +32,11 @@ $app = Application::configure(basePath: dirname(__DIR__))
         });
     })->create();
 
+// Immediately register core providers to ensure 'view' and DB services are available during early bootstrap errors
+$app->register(new \Illuminate\View\ViewServiceProvider($app));
+$app->register(new \Illuminate\Database\DatabaseServiceProvider($app));
+$app->register(new \Illuminate\Session\SessionServiceProvider($app));
+
 // Use writable /tmp/storage when running in Vercel serverless environment
 if (getenv('APP_STORAGE') || isset($_ENV['APP_STORAGE'])) {
     $app->useStoragePath(getenv('APP_STORAGE') ?: $_ENV['APP_STORAGE']);
