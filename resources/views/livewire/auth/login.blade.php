@@ -23,7 +23,7 @@
 
             <div>
                 <label class="block font-bold text-slate-300 mb-1">Password</label>
-                <input type="password" name="password" wire:model="password" required placeholder="••••••••" class="w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 text-sm font-medium">
+                <input type="password" name="password" value="password" required placeholder="••••••••" class="w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-4 py-3 outline-none focus:border-emerald-500 text-sm font-medium">
             </div>
 
             <button type="submit" class="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black text-sm uppercase tracking-wider rounded-xl shadow-xl shadow-emerald-500/20 transition-all">
