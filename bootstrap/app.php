@@ -19,6 +19,17 @@ $app = Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+        $exceptions->render(function (\Throwable $e, Request $request) {
+            if (!app()->bound('view')) {
+                return response(
+                    "<h1>Baqqala Serverless Early Bootstrap Error</h1>" .
+                    "<p><strong>Message:</strong> " . htmlspecialchars($e->getMessage()) . "</p>" .
+                    "<p><strong>File:</strong> " . htmlspecialchars($e->getFile()) . ":" . $e->getLine() . "</p>" .
+                    "<pre>" . htmlspecialchars($e->getTraceAsString()) . "</pre>",
+                    500
+                );
+            }
+        });
     })->create();
 
 // Use writable /tmp/storage when running in Vercel serverless environment
