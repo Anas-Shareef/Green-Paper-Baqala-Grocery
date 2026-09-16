@@ -80,13 +80,19 @@ try {
 } catch (\Throwable $e) {
     http_response_code(500);
     echo "<h1>Baqqala Serverless Diagnostics</h1>";
-    $orig = $e->getPrevious() ?: $e;
-    echo "<p><strong>Original Error:</strong> " . htmlspecialchars($orig->getMessage()) . "</p>";
-    echo "<p><strong>File:</strong> " . htmlspecialchars($orig->getFile()) . ":" . $orig->getLine() . "</p>";
-    echo "<pre>" . htmlspecialchars($orig->getTraceAsString()) . "</pre>";
-    if ($e->getPrevious()) {
-        echo "<h2>Outer Wrapper Exception</h2>";
-        echo "<p><strong>Wrapper Message:</strong> " . htmlspecialchars($e->getMessage()) . "</p>";
-        echo "<pre>" . htmlspecialchars($e->getTraceAsString()) . "</pre>";
+    echo "<p><strong>Message:</strong> " . htmlspecialchars($e->getMessage()) . "</p>";
+    echo "<p><strong>File:</strong> " . htmlspecialchars($e->getFile()) . ":" . $e->getLine() . "</p>";
+
+    $trace = $e->getTrace();
+    foreach ($trace as $frame) {
+        if (isset($frame['function']) && $frame['function'] === 'createDriver') {
+            echo "<div style='background:#fee2e2; border:2px solid #ef4444; padding:15px; border-radius:8px; margin:20px 0;'>";
+            echo "<h2 style='color:#991b1b; margin-top:0;'>FAILED MANAGER: " . htmlspecialchars($frame['class'] ?? 'Unknown') . "</h2>";
+            echo "<p><strong>Called Method:</strong> " . htmlspecialchars($frame['type'] ?? '') . htmlspecialchars($frame['function'] ?? '') . "</p>";
+            echo "<p><strong>Passed Arguments:</strong> <code>" . htmlspecialchars(json_encode($frame['args'] ?? [])) . "</code></p>";
+            echo "</div>";
+        }
     }
+
+    echo "<pre>" . htmlspecialchars($e->getTraceAsString()) . "</pre>";
 }
