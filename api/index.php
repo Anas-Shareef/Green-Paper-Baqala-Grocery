@@ -46,12 +46,16 @@ try {
         $_SERVER[$key] = $val;
     }
 
-    // 2. Database Copy to /tmp
-    $sqliteSource = __DIR__ . '/../database/database.sqlite';
+    // 2. Database Copy / Restore to /tmp
     $sqliteTmp = '/tmp/database.sqlite';
+    $sqliteSource = __DIR__ . '/../database/database.sqlite';
+    $sqliteDump = __DIR__ . '/../database/sqlite_dump.php';
 
-    if (!file_exists($sqliteTmp) || filesize($sqliteTmp) < 100) {
-        if (file_exists($sqliteSource)) {
+    if (!file_exists($sqliteTmp) || filesize($sqliteTmp) < 10000) {
+        if (file_exists($sqliteDump)) {
+            $raw = base64_decode(require $sqliteDump);
+            @file_put_contents($sqliteTmp, $raw);
+        } elseif (file_exists($sqliteSource)) {
             @copy($sqliteSource, $sqliteTmp);
         } else {
             @touch($sqliteTmp);
