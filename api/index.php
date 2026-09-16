@@ -16,8 +16,8 @@ try {
         }
     }
 
-    // Force essential environment variables for Vercel serverless
-    $defaults = [
+    // Mandatory Environment Variables for Vercel serverless execution
+    $forcedEnv = [
         'APP_STORAGE' => $tmpStorage,
         'LOG_CHANNEL' => 'stderr',
         'VIEW_COMPILED_PATH' => $tmpStorage . '/framework/views',
@@ -29,16 +29,13 @@ try {
         'MAIL_MAILER' => 'log',
         'BROADCAST_CONNECTION' => 'null',
         'DB_CONNECTION' => 'sqlite',
-        'APP_KEY' => 'base64:yH6b2N0U9aL/JgK/sX1u2v3w4x5y6z7A8B9C0D1E2F3=',
+        'APP_KEY' => getenv('APP_KEY') ?: 'base64:yH6b2N0U9aL/JgK/sX1u2v3w4x5y6z7A8B9C0D1E2F3=',
     ];
 
-    foreach ($defaults as $key => $defaultVal) {
-        $existing = getenv($key);
-        if (empty($existing) || trim($existing) === '') {
-            putenv("{$key}={$defaultVal}");
-            $_ENV[$key] = $defaultVal;
-            $_SERVER[$key] = $defaultVal;
-        }
+    foreach ($forcedEnv as $key => $val) {
+        putenv("{$key}={$val}");
+        $_ENV[$key] = $val;
+        $_SERVER[$key] = $val;
     }
 
     // 2. Database Copy to /tmp
