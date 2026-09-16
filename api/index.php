@@ -28,6 +28,9 @@ try {
         putenv("{$key}={$path}");
         $_ENV[$key] = $path;
         $_SERVER[$key] = $path;
+        if (file_exists($path)) {
+            @unlink($path);
+        }
     }
 
     // Mandatory Environment Variables for Vercel serverless execution
