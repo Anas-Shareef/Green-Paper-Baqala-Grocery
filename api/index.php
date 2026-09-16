@@ -29,6 +29,10 @@ try {
     $_ENV['VIEW_COMPILED_PATH'] = $tmpStorage . '/framework/views';
     $_SERVER['VIEW_COMPILED_PATH'] = $tmpStorage . '/framework/views';
 
+    putenv('APP_DEBUG=true');
+    $_ENV['APP_DEBUG'] = 'true';
+    $_SERVER['APP_DEBUG'] = 'true';
+
     // 2. Database connection & Auto Fallback handling
     $dbConnection = getenv('DB_CONNECTION') ?: ($_ENV['DB_CONNECTION'] ?? 'sqlite');
 
