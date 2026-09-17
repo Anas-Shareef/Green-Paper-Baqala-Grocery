@@ -25,7 +25,77 @@
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        <!-- Store Settings Form -->
+        <!-- Native Device OS Push Notification Control Card -->
+        <div x-data="osNotificationControl()" class="bg-white border border-slate-200/80 rounded-2xl p-6 space-y-4 shadow-sm lg:col-span-2">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                <div>
+                    <h3 class="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                        <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 01-6 0v-1m6 0H9"></path></svg>
+                        Native Device OS Push Notifications
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-0.5">Receive instant device system banners on your phone screen or desktop OS when a customer places a grocery delivery order.</p>
+                </div>
+
+                <!-- Status & Permission Toggle Button -->
+                <div class="flex items-center gap-3">
+                    <template x-if="permission === 'granted'">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full text-xs font-bold shadow-xs">
+                            <span class="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+                            ✓ OS Notifications Active
+                        </span>
+                    </template>
+                    <template x-if="permission === 'denied'">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-100 text-rose-800 border border-rose-300 rounded-full text-xs font-bold">
+                            ⚠️ Blocked in Browser Settings
+                        </span>
+                    </template>
+                    <template x-if="permission === 'default'">
+                        <button @click="requestPermission()" class="btn-glow px-4 py-2.5 text-xs font-bold flex items-center gap-2 shadow-md">
+                            🔔 Enable Native OS Notifications
+                        </button>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Features Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
+                    <div class="font-bold text-slate-900 flex items-center gap-1.5">
+                        📱 Instant Device OS Banner
+                    </div>
+                    <p class="text-slate-500 text-[11px] leading-relaxed">System popups appear on lockscreen and phone notification area.</p>
+                </div>
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
+                    <div class="font-bold text-slate-900 flex items-center gap-1.5">
+                        🚀 Direct One-Tap Navigation
+                    </div>
+                    <p class="text-slate-500 text-[11px] leading-relaxed">Tapping the notification opens <code class="bg-slate-200 px-1 py-0.5 rounded text-[10px] text-slate-800 font-mono">/admin/orders</code> directly.</p>
+                </div>
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
+                    <div class="font-bold text-slate-900 flex items-center gap-1.5">
+                        🔊 Audio Synthesizer Chime
+                    </div>
+                    <p class="text-slate-500 text-[11px] leading-relaxed">Plays loud chime sound automatically on new customer orders.</p>
+                </div>
+            </div>
+
+            <script>
+            function osNotificationControl() {
+                return {
+                    permission: 'Notification' in window ? Notification.permission : 'denied',
+                    async requestPermission() {
+                        if ('Notification' in window) {
+                            const res = await Notification.requestPermission();
+                            this.permission = res;
+                            if (res === 'granted' && 'serviceWorker' in navigator) {
+                                navigator.serviceWorker.register('/sw.js');
+                            }
+                        }
+                    }
+                }
+            }
+            </script>
+        </div>
         <div class="bg-white border border-slate-200/80 rounded-2xl p-6 space-y-4 shadow-sm">
             <h3 class="font-extrabold text-slate-900 text-base">Store & MOV Threshold Configurations</h3>
 
