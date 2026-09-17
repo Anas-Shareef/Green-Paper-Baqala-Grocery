@@ -1,4 +1,17 @@
+import React, { useState, useEffect } from 'react';
+import { Header } from './components/Header';
+import { Navbar } from './components/Navbar';
+import { CartDrawer } from './components/CartDrawer';
+import { AuthModal } from './components/AuthModal';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
+
+import { HomePage } from './pages/HomePage';
+import { CatalogPage } from './pages/CatalogPage';
+import { CheckoutPage } from './pages/CheckoutPage';
+import { TrackingPage } from './pages/TrackingPage';
+import { ProfilePage } from './pages/ProfilePage';
+
+import { api } from './services/api';
 
 export function App() {
   const [activeTab, setActiveTab] = useState('home'); // home, catalog, checkout, tracking, profile
