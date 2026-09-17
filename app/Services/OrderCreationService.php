@@ -100,7 +100,9 @@ class OrderCreationService
                             CustomerAddress::where('customer_id', $customer->id)->where('id', '!=', $address->id)->update(['is_default' => false]);
                         }
                     }
-                } catch (\Throwable $e) {}
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('Address creation in order tx warning: ' . $e->getMessage());
+                }
 
                 if (!$address) {
                     $address = (object) [
@@ -200,7 +202,9 @@ class OrderCreationService
                         'is_read' => false,
                     ]);
                 }
-            } catch (\Throwable $e) {}
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('AdminNotification in order tx warning: ' . $e->getMessage());
+            }
 
             // 7. Create Order Items & Deduct Stock
             foreach ($itemsToCreate as $i) {

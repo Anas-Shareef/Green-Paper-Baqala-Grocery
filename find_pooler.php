@@ -1,12 +1,8 @@
 <?php
 
 $regions = [
+    'aws-0-ap-northeast-2.pooler.supabase.com',
     'aws-0-ap-south-1.pooler.supabase.com',
-    'aws-0-ap-northeast-1.pooler.supabase.com',
-    'aws-0-ap-southeast-2.pooler.supabase.com',
-    'aws-0-ca-central-1.pooler.supabase.com',
-    'aws-0-eu-west-2.pooler.supabase.com',
-    'aws-0-eu-west-3.pooler.supabase.com',
 ];
 
 $user = 'postgres.aebcwkjzzcstyvdnmwoa';
