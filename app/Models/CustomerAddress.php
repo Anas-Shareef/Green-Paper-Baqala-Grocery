@@ -23,9 +23,15 @@ class CustomerAddress extends Model
         'is_default',
     ];
 
-    protected $casts = [
-        'is_default' => 'boolean',
-    ];
+    public function getIsDefaultAttribute($value): bool
+    {
+        return $value === true || $value === 't' || $value === 'true' || $value === 1 || $value === '1';
+    }
+
+    public function setIsDefaultAttribute($value): void
+    {
+        $this->attributes['is_default'] = ($value && $value !== 'false' && $value !== 'f') ? 'true' : 'false';
+    }
 
     public function customer(): BelongsTo
     {

@@ -19,9 +19,15 @@ class AdminNotification extends Model
         'is_read',
     ];
 
-    protected $casts = [
-        'is_read' => 'boolean',
-    ];
+    public function getIsReadAttribute($value): bool
+    {
+        return $value === true || $value === 't' || $value === 'true' || $value === 1 || $value === '1';
+    }
+
+    public function setIsReadAttribute($value): void
+    {
+        $this->attributes['is_read'] = ($value && $value !== 'false' && $value !== 'f') ? 'true' : 'false';
+    }
 
     public function order(): BelongsTo
     {

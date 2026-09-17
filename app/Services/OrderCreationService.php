@@ -101,7 +101,7 @@ class OrderCreationService
                             });
                         }
                         $address = $existingQuery->first() 
-                            ?? CustomerAddress::where('customer_id', $customer->id)->where('is_default', true)->first()
+                            ?? CustomerAddress::where('customer_id', $customer->id)->whereRaw('is_default = true')->first()
                             ?? CustomerAddress::where('customer_id', $customer->id)->first();
 
                         if ($address) {
@@ -121,7 +121,7 @@ class OrderCreationService
                                 'street_address' => $street ?: 'Villa Delivery',
                                 'zone' => $zone,
                                 'delivery_notes' => $notes,
-                                'is_default' => true,
+                                'is_default' => \Illuminate\Support\Facades\DB::raw('true'),
                             ]);
                         }
                     }
@@ -241,7 +241,7 @@ class OrderCreationService
                         'message' => "Order {$order->order_number} (Customer Order #{$customerOrderNumber}) from {$customer->name}",
                         'order_id' => $order->id,
                         'order_number' => $order->order_number,
-                        'is_read' => false,
+                        'is_read' => \Illuminate\Support\Facades\DB::raw('false'),
                     ]);
                 }
             } catch (\Throwable $e) {

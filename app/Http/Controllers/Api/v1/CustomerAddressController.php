@@ -159,7 +159,7 @@ class CustomerAddressController extends BaseApiController
         $isDefault = $isFirst || (bool) $request->input('is_default', false);
 
         if ($isDefault) {
-            CustomerAddress::where('customer_id', $customer->id)->update(['is_default' => false]);
+            CustomerAddress::where('customer_id', $customer->id)->update(['is_default' => \Illuminate\Support\Facades\DB::raw('false')]);
         }
 
         $address = CustomerAddress::create([
@@ -195,8 +195,8 @@ class CustomerAddressController extends BaseApiController
         if ($request->has('is_default') && $request->input('is_default')) {
             CustomerAddress::where('customer_id', $address->customer_id)
                 ->where('id', '!=', $address->id)
-                ->update(['is_default' => false]);
-            $address->update(['is_default' => true]);
+                ->update(['is_default' => \Illuminate\Support\Facades\DB::raw('false')]);
+            $address->update(['is_default' => \Illuminate\Support\Facades\DB::raw('true')]);
         }
 
         return $this->successResponse($address, 'Address updated successfully');
@@ -220,7 +220,7 @@ class CustomerAddressController extends BaseApiController
         if ($wasDefault) {
             $nextAddress = CustomerAddress::where('customer_id', $customerId)->first();
             if ($nextAddress) {
-                $nextAddress->update(['is_default' => true]);
+                $nextAddress->update(['is_default' => \Illuminate\Support\Facades\DB::raw('true')]);
             }
         }
 
@@ -237,8 +237,8 @@ class CustomerAddressController extends BaseApiController
             return $this->errorResponse('Address not found', [], 404);
         }
 
-        CustomerAddress::where('customer_id', $address->customer_id)->update(['is_default' => false]);
-        $address->update(['is_default' => true]);
+        CustomerAddress::where('customer_id', $address->customer_id)->update(['is_default' => \Illuminate\Support\Facades\DB::raw('false')]);
+        $address->update(['is_default' => \Illuminate\Support\Facades\DB::raw('true')]);
 
         return $this->successResponse($address, 'Address set as default');
     }
