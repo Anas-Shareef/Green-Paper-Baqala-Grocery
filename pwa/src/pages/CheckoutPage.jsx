@@ -13,13 +13,21 @@ export const CheckoutPage = ({ cart, customer, onOrderSuccess, onBackToCart }) =
   const [savedAddresses, setSavedAddresses] = useState([]);
   const [selectedAddressId, setSelectedAddressId] = useState(null);
 
-  // New Customer Address Form State
-  const [newCustomerName, setNewCustomerName] = useState('');
-  const [newVillaNumber, setNewVillaNumber] = useState('');
-  const [newStreetAddress, setNewStreetAddress] = useState('');
-  const [newZone, setNewZone] = useState('');
-  const [newLandmark, setNewLandmark] = useState('');
-  const [newDeliveryNotes, setNewDeliveryNotes] = useState('');
+  const [isEditingAddress, setIsEditingAddress] = useState(false);
+
+  // Sync edit address fields when recognized customer selected address changes
+  useEffect(() => {
+    if (recognizedCustomer) {
+      setNewCustomerName(recognizedCustomer.name || '');
+      const addr = savedAddresses.find(a => a.id === selectedAddressId) || savedAddresses[0];
+      if (addr) {
+        setNewVillaNumber(addr.villa_number || '');
+        setNewStreetAddress(addr.street_address || '');
+        setNewZone(addr.zone || '');
+        setNewLandmark(addr.landmark || '');
+      }
+    }
+  }, [recognizedCustomer, selectedAddressId, savedAddresses]);
 
   // General Checkout State
   const [loading, setLoading] = useState(false);
@@ -375,62 +383,109 @@ export const CheckoutPage = ({ cart, customer, onOrderSuccess, onBackToCart }) =
               📍 2. Delivery Address
             </h2>
 
-            {/* SCENARIO A: RECOGNIZED CUSTOMER (READ-ONLY DETAILS) */}
+            {/* SCENARIO A: RECOGNIZED CUSTOMER */}
             {recognitionStatus === 'recognized' && (
-              <div className="space-y-3">
-                <div className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Saved Delivery Address
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Saved Delivery Address
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingAddress(!isEditingAddress)}
+                    className="text-xs text-emerald-700 hover:text-emerald-800 font-bold underline transition-colors"
+                  >
+                    {isEditingAddress ? '← Use Saved Address' : 'Edit Address'}
+                  </button>
                 </div>
 
-                {savedAddresses.length > 0 ? (
+                {!isEditingAddress ? (
                   <div className="space-y-3">
-                    {savedAddresses.map((addr) => {
-                      const isSelected = selectedAddressId === addr.id;
-                      return (
-                        <div
-                          key={addr.id}
-                          onClick={() => setSelectedAddressId(addr.id)}
-                          className={`p-4 rounded-xl border transition-all cursor-pointer space-y-1.5 ${
-                            isSelected
-                              ? 'bg-emerald-50/80 border-emerald-600 text-emerald-950 shadow-xs'
-                              : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-emerald-300'
-                          }`}
-                        >
-                          <div className="flex justify-between items-center">
-                            <span className="font-black text-xs flex items-center gap-1.5">
-                              🏠 {addr.villa_number ? `Villa ${addr.villa_number}` : 'Villa Delivery'}
-                              {addr.is_default && (
-                                <span className="bg-emerald-200 text-emerald-900 text-[9px] px-1.5 py-0.2 rounded font-extrabold uppercase">
-                                  Default
+                    {savedAddresses.length > 0 ? (
+                      <div className="space-y-3">
+                        {savedAddresses.map((addr) => {
+                          const isSelected = selectedAddressId === addr.id;
+                          return (
+                            <div
+                              key={addr.id}
+                              onClick={() => setSelectedAddressId(addr.id)}
+                              className={`p-4 rounded-xl border transition-all cursor-pointer space-y-1.5 ${
+                                isSelected
+                                  ? 'bg-emerald-50/80 border-emerald-600 text-emerald-950 shadow-xs'
+                                  : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-emerald-300'
+                              }`}
+                            >
+                              <div className="flex justify-between items-center">
+                                <span className="font-black text-xs flex items-center gap-1.5">
+                                  🏠 {addr.villa_number ? `Villa ${addr.villa_number}` : 'Villa Delivery'}
+                                  {addr.is_default && (
+                                    <span className="bg-emerald-200 text-emerald-900 text-[9px] px-1.5 py-0.2 rounded font-extrabold uppercase">
+                                      Default
+                                    </span>
+                                  )}
                                 </span>
+                                <div className="w-4 h-4 rounded-full border border-emerald-600 flex items-center justify-center">
+                                  {isSelected && <div className="w-2.5 h-2.5 bg-emerald-600 rounded-full" />}
+                                </div>
+                              </div>
+                              <div className="text-xs text-slate-800 font-medium">
+                                {addr.street_address} {addr.zone && !addr.street_address.includes(addr.zone) ? `, ${addr.zone}` : ''}
+                              </div>
+                              {addr.landmark && (
+                                <div className="text-[11px] text-slate-500">
+                                  Near {addr.landmark}
+                                </div>
                               )}
-                            </span>
-                            <div className="w-4 h-4 rounded-full border border-emerald-600 flex items-center justify-center">
-                              {isSelected && <div className="w-2.5 h-2.5 bg-emerald-600 rounded-full" />}
                             </div>
-                          </div>
-                          <div className="text-xs text-slate-800 font-medium">
-                            {addr.street_address} {addr.zone && !addr.street_address.includes(addr.zone) ? `, ${addr.zone}` : ''}
-                          </div>
-                          {addr.landmark && (
-                            <div className="text-[11px] text-slate-500">
-                              Near {addr.landmark}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-600 text-xs">
+                        No saved addresses found. Click "Edit Address" to enter delivery details.
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-600 text-xs">
-                    No saved addresses found. Default villa address will be assigned.
+                  <div className="space-y-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+                    <div className="text-xs font-bold text-slate-800 pb-1">Update Delivery Address:</div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">Villa Number *</label>
+                        <input
+                          type="text"
+                          value={newVillaNumber}
+                          onChange={(e) => setNewVillaNumber(e.target.value)}
+                          required
+                          placeholder="e.g. Villa 94"
+                          className="w-full bg-white border border-slate-300 text-slate-900 font-bold rounded-xl px-3 py-2 outline-none focus:border-emerald-600"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">Zone *</label>
+                        <input
+                          type="text"
+                          value={newZone}
+                          onChange={(e) => setNewZone(e.target.value)}
+                          required
+                          placeholder="e.g. Zone B"
+                          className="w-full bg-white border border-slate-300 text-slate-900 rounded-xl px-3 py-2 outline-none focus:border-emerald-600"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Street / Area *</label>
+                      <input
+                        type="text"
+                        value={newStreetAddress}
+                        onChange={(e) => setNewStreetAddress(e.target.value)}
+                        required
+                        placeholder="e.g. Street 11"
+                        className="w-full bg-white border border-slate-300 text-slate-900 rounded-xl px-3 py-2 outline-none focus:border-emerald-600"
+                      />
+                    </div>
                   </div>
                 )}
-
-                <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-xl text-[11px] text-amber-900 font-semibold flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
-                  Customer details are read-only at checkout.
-                </div>
               </div>
             )}
 

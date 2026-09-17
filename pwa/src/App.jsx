@@ -1,28 +1,42 @@
-import React, { useState, useEffect } from 'react';
-import { Header } from './components/Header';
-import { Navbar } from './components/Navbar';
-import { CartDrawer } from './components/CartDrawer';
-import { AuthModal } from './components/AuthModal';
-
-import { HomePage } from './pages/HomePage';
-import { CatalogPage } from './pages/CatalogPage';
-import { CheckoutPage } from './pages/CheckoutPage';
-import { TrackingPage } from './pages/TrackingPage';
-import { ProfilePage } from './pages/ProfilePage';
-
-import { api } from './services/api';
+import { PwaInstallBanner } from './components/PwaInstallBanner';
 
 export function App() {
   const [activeTab, setActiveTab] = useState('home'); // home, catalog, checkout, tracking, profile
   const [homeData, setHomeData] = useState(null);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [cart, setCart] = useState([]);
-  const [customer, setCustomer] = useState(null);
-  const [currentOrder, setCurrentOrder] = useState(null);
+  
+  // Persistent Cart in LocalStorage
+  const [cart, setCart] = useState(() => {
+    try {
+      const saved = localStorage.getItem('baqqala_cart');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
 
+  const [customer, setCustomer] = useState(() => {
+    try {
+      const saved = localStorage.getItem('baqqala_customer');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+  
+  const [currentOrder, setCurrentOrder] = useState(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+
+  // Sync Cart to LocalStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('baqqala_cart', JSON.stringify(cart));
+    } catch (e) {
+      console.error('Cart sync error:', e);
+    }
+  }, [cart]);
 
   useEffect(() => {
     api.getHome().then((data) => {
@@ -88,6 +102,7 @@ export function App() {
 
       {/* Main View Container */}
       <main className="flex-1 p-4 max-w-6xl mx-auto w-full">
+        <PwaInstallBanner />
         {activeTab === 'home' && (
           <HomePage
             categories={categories}
