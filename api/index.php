@@ -1,22 +1,7 @@
 <?php
 
 // 0. Handle CORS Headers and OPTIONS preflight requests globally for Vercel
-$requestOrigin = $_SERVER['HTTP_ORIGIN'] ?? (isset($_SERVER['HTTP_REFERER']) ? parse_url($_SERVER['HTTP_REFERER'], PHP_URL_SCHEME) . '://' . parse_url($_SERVER['HTTP_REFERER'], PHP_URL_HOST) : '');
-$allowedOrigins = [
-    'https://green-paper-baqala-grocery.vercel.app',
-    'https://baqqala-admin.vercel.app',
-    'http://localhost:5173',
-    'http://localhost:3000',
-    'http://localhost:8000',
-];
-
-if (!empty($requestOrigin) && in_array($requestOrigin, $allowedOrigins, true)) {
-    header("Access-Control-Allow-Origin: {$requestOrigin}");
-    header("Access-Control-Allow-Credentials: true");
-} else {
-    header("Access-Control-Allow-Origin: *");
-}
-
+header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, PATCH, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Accept, X-CSRF-TOKEN, Origin");
 
