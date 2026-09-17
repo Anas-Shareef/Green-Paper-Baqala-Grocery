@@ -80,6 +80,40 @@ class CustomerCheckoutTest extends TestCase
         $res2->assertJsonCount(1, 'data.addresses');
     }
 
+    public function test_customer_recognition_with_various_phone_formats()
+    {
+        // Create a customer with local format in database: 0508889900
+        $customer = Customer::create([
+            'name' => 'Mohammed Anas',
+            'phone' => '0508889900',
+            'status' => 'active',
+        ]);
+
+        CustomerAddress::create([
+            'customer_id' => $customer->id,
+            'label' => 'Villa Home',
+            'villa_number' => '24',
+            'street_address' => 'Zone 19, Abu Dhabi',
+            'is_default' => true,
+        ]);
+
+        // Query with +971508889900
+        $res1 = $this->postJson('/api/v1/customer/recognize', ['phone' => '+971508889900']);
+        $res1->assertStatus(200);
+        $res1->assertJsonPath('data.customer_exists', true);
+        $res1->assertJsonPath('data.customer.name', 'Mohammed Anas');
+
+        // Query with 971508889900
+        $res2 = $this->postJson('/api/v1/customer/recognize', ['phone' => '971508889900']);
+        $res2->assertStatus(200);
+        $res2->assertJsonPath('data.customer_exists', true);
+
+        // Query with 0508889900
+        $res3 = $this->postJson('/api/v1/customer/recognize', ['phone' => '0508889900']);
+        $res3->assertStatus(200);
+        $res3->assertJsonPath('data.customer_exists', true);
+    }
+
     public function test_reject_unsupported_payment_method()
     {
         $payload = [

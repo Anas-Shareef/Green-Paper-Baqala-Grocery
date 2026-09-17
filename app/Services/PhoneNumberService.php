@@ -50,4 +50,39 @@ class PhoneNumberService
         $normalized = self::normalize($phone);
         return ltrim($normalized, '+');
     }
+
+    /**
+     * Find existing Customer record matching any format variant of raw or normalized phone number
+     */
+    public static function findCustomer(?string $rawPhone): ?\App\Models\Customer
+    {
+        if (empty($rawPhone)) {
+            return null;
+        }
+
+        $raw = trim($rawPhone);
+        $normalized = self::normalize($raw);
+        $digitsOnly = preg_replace('/[^\d]/', '', $raw);
+
+        $candidates = array_values(array_unique(array_filter([
+            $normalized,
+            $raw,
+            $digitsOnly,
+            str_starts_with($normalized, '+971') ? '0' . substr($normalized, 4) : null,
+            ltrim($normalized, '+'),
+            str_starts_with($normalized, '+971') ? substr($normalized, 4) : null,
+        ])));
+
+        $last7 = strlen($digitsOnly) >= 7 ? substr($digitsOnly, -7) : $digitsOnly;
+
+        return \App\Models\Customer::where(function ($query) use ($candidates, $last7) {
+            $query->whereIn('phone', $candidates)
+                  ->orWhereIn('whatsapp_number', $candidates);
+
+            if (strlen($last7) >= 7) {
+                $query->orWhere('phone', 'LIKE', "%{$last7}")
+                      ->orWhere('whatsapp_number', 'LIKE', "%{$last7}");
+            }
+        })->first();
+    }
 }

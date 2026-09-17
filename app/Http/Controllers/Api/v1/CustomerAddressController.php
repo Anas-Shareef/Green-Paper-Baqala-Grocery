@@ -24,14 +24,13 @@ class CustomerAddressController extends BaseApiController
             return $this->errorResponse('Valid phone number is required', $validator->errors(), 422);
         }
 
-        $phone = PhoneNumberService::normalize($request->input('phone'));
+        $rawPhone = $request->input('phone');
+        $phone = PhoneNumberService::normalize($rawPhone);
         if (empty($phone)) {
             return $this->errorResponse('Please enter a valid UAE mobile number.', [], 422);
         }
 
-        $customer = Customer::where('phone', $phone)->with(['addresses' => function ($q) {
-            $q->orderBy('is_default', 'desc')->orderBy('id', 'desc');
-        }])->first();
+        $customer = PhoneNumberService::findCustomer($rawPhone);
 
         if (!$customer) {
             return $this->successResponse([
@@ -41,6 +40,10 @@ class CustomerAddressController extends BaseApiController
                 'addresses' => [],
             ], 'Mobile number is available for a new guest order.');
         }
+
+        $customer->load(['addresses' => function ($q) {
+            $q->orderBy('is_default', 'desc')->orderBy('id', 'desc');
+        }]);
 
         return $this->successResponse([
             'customer_exists' => true,
@@ -67,12 +70,12 @@ class CustomerAddressController extends BaseApiController
      */
     public function index(Request $request): JsonResponse
     {
-        $phone = PhoneNumberService::normalize($request->input('phone', ''));
-        if (empty($phone)) {
+        $rawPhone = $request->input('phone', '');
+        if (empty($rawPhone)) {
             return $this->errorResponse('Phone parameter is required', [], 422);
         }
 
-        $customer = Customer::where('phone', $phone)->first();
+        $customer = PhoneNumberService::findCustomer($rawPhone);
         if (!$customer) {
             return $this->successResponse([], 'No addresses found for customer');
         }
@@ -107,13 +110,18 @@ class CustomerAddressController extends BaseApiController
             return $this->errorResponse('Validation failed', $validator->errors(), 422);
         }
 
-        $phone = PhoneNumberService::normalize($request->input('phone'));
+        $rawPhone = $request->input('phone');
+        $phone = PhoneNumberService::normalize($rawPhone);
         $name = trim($request->input('name', 'Valued Customer'));
 
-        $customer = Customer::firstOrCreate(
-            ['phone' => $phone],
-            ['name' => $name, 'status' => 'active']
-        );
+        $customer = PhoneNumberService::findCustomer($rawPhone);
+        if (!$customer) {
+            $customer = Customer::create([
+                'phone' => $phone,
+                'name' => $name,
+                'status' => 'active',
+            ]);
+        }
 
         if ($name !== 'Valued Customer' && $customer->name === 'Valued Customer') {
             $customer->update(['name' => $name]);

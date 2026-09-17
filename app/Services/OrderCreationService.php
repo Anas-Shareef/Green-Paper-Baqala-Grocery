@@ -50,10 +50,14 @@ class OrderCreationService
             }
 
             // 3. Customer Lookup or Creation
-            $customer = Customer::firstOrCreate(
-                ['phone' => $phone],
-                ['name' => $name, 'status' => 'active']
-            );
+            $customer = PhoneNumberService::findCustomer($rawPhone);
+            if (!$customer) {
+                $customer = Customer::create([
+                    'phone' => $phone,
+                    'name' => $name,
+                    'status' => 'active',
+                ]);
+            }
 
             // Update customer name if provided
             if ($name !== 'Valued Customer' && $customer->name === 'Valued Customer') {
