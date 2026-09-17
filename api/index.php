@@ -33,6 +33,17 @@ try {
         }
     }
 
+    // Propagate all database environment variables from Vercel environment
+    $dbKeys = ['DB_CONNECTION', 'DB_HOST', 'DB_PORT', 'DB_DATABASE', 'DB_USERNAME', 'DB_PASSWORD', 'DB_SSLMODE', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_STORAGE_BUCKET'];
+    foreach ($dbKeys as $k) {
+        $v = getenv($k) ?: ($_ENV[$k] ?? ($_SERVER[$k] ?? null));
+        if ($v !== null && $v !== '') {
+            putenv("{$k}={$v}");
+            $_ENV[$k] = $v;
+            $_SERVER[$k] = $v;
+        }
+    }
+
     // Detect database configuration: Supabase PostgreSQL vs SQLite fallback
     $dbDriver = getenv('DB_CONNECTION') ?: ($_ENV['DB_CONNECTION'] ?? 'sqlite');
     $dbHost = getenv('DB_HOST') ?: ($_ENV['DB_HOST'] ?? '');

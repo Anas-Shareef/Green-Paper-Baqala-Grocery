@@ -34,6 +34,7 @@ class HealthController extends BaseApiController
                 'application' => 'ok',
                 'database' => 'disconnected',
                 'error' => 'Unable to connect to database server',
+                'error_detail' => $e->getMessage(),
                 'timestamp' => now()->toIso8601String(),
             ], 500);
         }
