@@ -96,6 +96,7 @@ export function AdminRealtimeProvider({ children }) {
       const res = await adminApi.realtimeCheck(lastNotificationIdRef.current);
       if (res && res.data) {
         const { 
+          notifications: allNotifs,
           new_notifications, 
           unread_count, 
           pending_orders_count, 
@@ -108,6 +109,9 @@ export function AdminRealtimeProvider({ children }) {
         if (latest_pending_orders) {
           setLatestPendingOrders(latest_pending_orders);
         }
+        if (allNotifs) {
+          setNotifications(allNotifs);
+        }
 
         // Handle newly arrived order notifications
         if (new_notifications && new_notifications.length > 0) {
@@ -115,19 +119,6 @@ export function AdminRealtimeProvider({ children }) {
             lastNotificationIdRef.current,
             latest_notification_id || 0
           );
-
-          setNotifications(prev => {
-            const combined = [...new_notifications, ...prev];
-            const unique = [];
-            const ids = new Set();
-            for (const n of combined) {
-              if (!ids.has(n.id)) {
-                ids.add(n.id);
-                unique.push(n);
-              }
-            }
-            return unique.slice(0, 30);
-          });
 
           // Trigger sound, toast & browser notification if NOT initial page load
           if (!isInitialFetchRef.current) {

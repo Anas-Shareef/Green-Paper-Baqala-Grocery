@@ -33,6 +33,7 @@ class AdminNotificationController extends BaseApiController
     {
         $sinceId = (int) $request->input('since_id', 0);
 
+        $allNotifications = AdminNotification::orderBy('id', 'desc')->take(30)->get();
         $newNotifications = AdminNotification::where('id', '>', $sinceId)
             ->orderBy('id', 'asc')
             ->get();
@@ -47,6 +48,7 @@ class AdminNotificationController extends BaseApiController
             ->get();
 
         return $this->successResponse([
+            'notifications' => $allNotifications,
             'new_notifications' => $newNotifications,
             'unread_count' => $unreadCount,
             'pending_orders_count' => $pendingOrdersCount,

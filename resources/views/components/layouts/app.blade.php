@@ -472,33 +472,45 @@
 
             async fetchCheck() {
                 try {
-                    const res = await fetch('/api/v1/admin/realtime-check');
+                    const res = await fetch('/api/v1/admin/realtime-check?since_id=' + this.lastNotificationId);
                     if (res.ok) {
                         const json = await res.json();
                         if (json.success && json.data) {
+                            const list = json.data.notifications || [];
                             const newCount = json.data.unread_count || 0;
-                            const latest = json.data.latest || [];
-                            
-                            if (latest.length > 0 && this.lastNotificationId !== 0 && latest[0].id > this.lastNotificationId) {
-                                const newNotif = latest[0];
-                                this.toast = newNotif;
+                            const newItems = json.data.new_notifications || [];
+                            const maxId = json.data.latest_notification_id || 0;
+
+                            if (newItems.length > 0 && this.lastNotificationId !== 0) {
+                                const newest = newItems[0];
+                                this.toast = newest;
                                 if (this.soundEnabled) {
                                     this.playChime();
+                                }
+                                if ('Notification' in window && Notification.permission === 'granted') {
+                                    try {
+                                        new Notification(newest.title || '🛒 New Baqqala Order', {
+                                            body: newest.message || 'New order received',
+                                            icon: '/favicon.ico',
+                                        });
+                                    } catch (e) {}
                                 }
                                 if (window.Livewire) {
                                     Livewire.dispatch('orderReceived');
                                 }
                             }
 
-                            if (latest.length > 0) {
-                                this.lastNotificationId = latest[0].id;
+                            if (maxId > 0) {
+                                this.lastNotificationId = maxId;
                             }
 
                             this.unreadCount = newCount;
-                            this.notifications = latest;
+                            this.notifications = list;
                         }
                     }
-                } catch (e) {}
+                } catch (e) {
+                    console.error('Realtime check error:', e);
+                }
             },
 
             playChime() {
