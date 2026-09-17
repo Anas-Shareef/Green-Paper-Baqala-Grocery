@@ -1,0 +1,15 @@
+{
+  "customer_phone": "+971501234567",
+  "customer_name": "Abdullah Audit Test",
+  "villa_number": "99",
+  "delivery_address": "Street 22",
+  "zone": "Zone Test",
+  "payment_method": "cod",
+  "idempotency_key": "audit-order-test-999",
+  "items": [
+    {
+      "product_id": 27,
+      "quantity": 1
+    }
+  ]
+}

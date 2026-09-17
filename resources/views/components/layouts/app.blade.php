@@ -466,9 +466,6 @@
             lastNotificationId: 0,
 
             initNotifications() {
-                if ('serviceWorker' in navigator) {
-                    navigator.serviceWorker.register('/sw.js').catch(e => console.error(e));
-                }
                 this.fetchCheck();
                 setInterval(() => this.fetchCheck(), 3000);
             },

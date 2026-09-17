@@ -89,7 +89,7 @@ export const TrackingPage = ({ currentOrder }) => {
             <div className="pt-3 border-t border-slate-100 flex justify-between items-center text-xs">
               <span className="text-slate-500">Customer PDF Invoice:</span>
               <a
-                href={`${import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:8000' : 'https://baqqala-admin.vercel.app/api/index.php')}/invoice/${order.order_number}`}
+                href={`${import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:8000' : '')}/api/invoice/${order.order_number}`}
                 target="_blank"
                 rel="noreferrer"
                 className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl font-bold flex items-center gap-1.5 transition-all"

@@ -42,50 +42,28 @@ export function AdminRealtimeProvider({ children }) {
   const lastNotificationIdRef = useRef(0);
   const isInitialFetchRef = useRef(true);
 
-  // 1. Register Service Worker & check Push API support
+  // 1. Check Native Desktop Notification support (Admin does not use sw.js)
   useEffect(() => {
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
+    if ('Notification' in window) {
       setPushSupported(true);
-      navigator.serviceWorker.register('/sw.js')
-        .then((reg) => {
-          return reg.pushManager.getSubscription();
-        })
-        .then((sub) => {
-          if (sub) {
-            setPushSubscribed(true);
-          }
-        })
-        .catch((err) => console.error('Service worker error:', err));
+      if (Notification.permission === 'granted') {
+        setPushSubscribed(true);
+      }
     }
   }, []);
 
-  // Request Desktop & Web Push Notification Permission
+  // Request Native Desktop Notification Permission
   const requestPushPermission = async () => {
     if (!('Notification' in window)) return false;
     
     try {
       const permission = await Notification.requestPermission();
-      if (permission === 'granted' && navigator.serviceWorker) {
-        const reg = await navigator.serviceWorker.ready;
-        let sub = await reg.pushManager.getSubscription();
-        if (!sub) {
-          sub = await reg.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: null,
-          });
-        }
-        if (sub) {
-          setPushSubscribed(true);
-          await adminApi.subscribePush({
-            endpoint: sub.endpoint,
-            public_key: sub.getKey ? btoa(String.fromCharCode.apply(null, new Uint8Array(sub.getKey('p256dh')))) : null,
-            auth_token: sub.getKey ? btoa(String.fromCharCode.apply(null, new Uint8Array(sub.getKey('auth')))) : null,
-          });
-        }
+      if (permission === 'granted') {
+        setPushSubscribed(true);
         return true;
       }
     } catch (e) {
-      console.error('Push permission error:', e);
+      console.error('Desktop notification permission error:', e);
     }
     return false;
   };

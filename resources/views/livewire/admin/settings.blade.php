@@ -87,9 +87,6 @@
                         if ('Notification' in window) {
                             const res = await Notification.requestPermission();
                             this.permission = res;
-                            if (res === 'granted' && 'serviceWorker' in navigator) {
-                                navigator.serviceWorker.register('/sw.js');
-                            }
                         }
                     }
                 }

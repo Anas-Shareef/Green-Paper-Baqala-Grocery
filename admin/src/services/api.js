@@ -3,12 +3,13 @@ import axios from 'axios';
 const getApiBaseUrl = () => {
   if (import.meta.env.VITE_API_URL) {
     const base = import.meta.env.VITE_API_URL.replace(/\/$/, '');
-    return base.endsWith('/v1') ? base : `${base}/v1`;
+    return base.endsWith('/v1') ? base : (base.endsWith('/api') ? `${base}/v1` : `${base}/api/v1`);
   }
   if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
     return 'http://localhost:8000/api/v1';
   }
-  return 'https://baqqala-admin.vercel.app/api/v1';
+  // Relative API route (resolved via Vercel proxy rewrite or same-origin)
+  return '/api/v1';
 };
 
 const client = axios.create({
