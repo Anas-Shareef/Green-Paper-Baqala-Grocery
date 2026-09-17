@@ -54,6 +54,37 @@ export const api = {
     }
   },
 
+  // Customer Recognition & Address Book API
+  identifyCustomer: async (phone) => {
+    const res = await client.post(getApiUrl('/customer/identify'), { phone });
+    return res.data?.data || res.data;
+  },
+
+  getCustomerAddresses: async (phone) => {
+    const res = await client.get(getApiUrl('/customer/addresses'), { params: { phone } });
+    return res.data?.data || res.data;
+  },
+
+  createCustomerAddress: async (payload) => {
+    const res = await client.post(getApiUrl('/customer/addresses'), payload);
+    return res.data?.data || res.data;
+  },
+
+  updateCustomerAddress: async (id, payload) => {
+    const res = await client.put(getApiUrl(`/customer/addresses/${id}`), payload);
+    return res.data?.data || res.data;
+  },
+
+  deleteCustomerAddress: async (id) => {
+    const res = await client.delete(getApiUrl(`/customer/addresses/${id}`));
+    return res.data?.data || res.data;
+  },
+
+  setDefaultAddress: async (id) => {
+    const res = await client.post(getApiUrl(`/customer/addresses/${id}/default`));
+    return res.data?.data || res.data;
+  },
+
   sendOtp: async (phone) => {
     const res = await client.post(getApiUrl('/auth/send-otp'), { phone });
     return res.data?.data || res.data;

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\v1\Admin\AdminCategoryController;
+use App\Http\Controllers\Api\v1\Admin\AdminCustomerController;
 use App\Http\Controllers\Api\v1\Admin\AdminDashboardController;
 use App\Http\Controllers\Api\v1\Admin\AdminExpenseController;
 use App\Http\Controllers\Api\v1\Admin\AdminInventoryController;
@@ -8,6 +9,7 @@ use App\Http\Controllers\Api\v1\Admin\AdminOrderController;
 use App\Http\Controllers\Api\v1\Admin\AdminProductController;
 use App\Http\Controllers\Api\v1\Admin\AdminReportController;
 use App\Http\Controllers\Api\v1\AuthController;
+use App\Http\Controllers\Api\v1\CustomerAddressController;
 use App\Http\Controllers\Api\v1\OrderController;
 use App\Http\Controllers\Api\v1\ProductController;
 use Illuminate\Support\Facades\Route;
@@ -26,6 +28,14 @@ Route::prefix('v1')->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::post('/auth/send-otp', [AuthController::class, 'sendOtp']);
     Route::post('/auth/verify-otp', [AuthController::class, 'verifyOtp']);
+
+    // Customer Recognition & Address Book Routes
+    Route::post('/customer/identify', [CustomerAddressController::class, 'identify']);
+    Route::get('/customer/addresses', [CustomerAddressController::class, 'index']);
+    Route::post('/customer/addresses', [CustomerAddressController::class, 'store']);
+    Route::put('/customer/addresses/{id}', [CustomerAddressController::class, 'update']);
+    Route::delete('/customer/addresses/{id}', [CustomerAddressController::class, 'destroy']);
+    Route::post('/customer/addresses/{id}/default', [CustomerAddressController::class, 'setDefault']);
 
     // Customer Storefront Routes
     Route::get('/home', [ProductController::class, 'home']);
@@ -61,6 +71,10 @@ Route::prefix('v1')->group(function () {
         Route::get('/orders', [AdminOrderController::class, 'index']);
         Route::get('/orders/{id}', [AdminOrderController::class, 'show']);
         Route::put('/orders/{id}/status', [AdminOrderController::class, 'updateStatus']);
+
+        Route::get('/customers', [AdminCustomerController::class, 'index']);
+        Route::get('/customers/{id}', [AdminCustomerController::class, 'show']);
+        Route::put('/customers/{id}', [AdminCustomerController::class, 'update']);
 
         Route::get('/expenses', [AdminExpenseController::class, 'index']);
         Route::post('/expenses', [AdminExpenseController::class, 'store']);

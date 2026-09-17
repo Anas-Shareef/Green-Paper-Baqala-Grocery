@@ -2,33 +2,46 @@
 
 namespace App\Http\Controllers\Api\v1;
 
-use App\Models\Customer;
 use App\Models\Order;
-use App\Models\OrderItem;
-use App\Models\Product;
-use App\Models\StockMovement;
+use App\Services\OrderCreationService;
+use App\Services\PhoneNumberService;
+use App\Services\WhatsAppOrderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
 
 class OrderController extends BaseApiController
 {
+    protected OrderCreationService $orderCreationService;
+    protected WhatsAppOrderService $whatsappService;
+
+    public function __construct(
+        OrderCreationService $orderCreationService,
+        WhatsAppOrderService $whatsappService
+    ) {
+        $this->orderCreationService = $orderCreationService;
+        $this->whatsappService = $whatsappService;
+    }
+
     /**
-     * Store New Customer Order (Atomic Database Transaction)
+     * Store New Customer Order (Atomic Database Transaction & WhatsApp Generation)
      */
     public function store(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'customer_name' => 'required|string|max:255',
-            'customer_phone' => 'required|string|max:20',
-            'delivery_address' => 'required|string',
-            'payment_method' => 'required|string|in:cash,card,online,cod',
+            'name' => 'nullable|string|max:255',
+            'phone' => 'nullable|string|max:20',
+            'customer_name' => 'nullable|string|max:255',
+            'customer_phone' => 'nullable|string|max:20',
+            'villa_number' => 'nullable|string',
+            'address' => 'nullable',
+            'delivery_address' => 'nullable|string',
+            'payment_method' => 'required|string',
             'items' => 'required|array|min:1',
             'items.*.product_id' => 'required|exists:products,id',
             'items.*.quantity' => 'required|integer|min:1',
             'notes' => 'nullable|string',
+            'idempotency_key' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -36,94 +49,27 @@ class OrderController extends BaseApiController
         }
 
         try {
-            $order = DB::transaction(function () use ($request) {
-                $phone = trim($request->input('customer_phone'));
-                $name = trim($request->input('customer_name'));
+            $input = $request->all();
+            
+            // Normalize payload fields for backwards compatibility
+            $input['customer_name'] = $input['name'] ?? $input['customer_name'] ?? $input['customer']['name'] ?? 'Valued Customer';
+            $input['customer_phone'] = $input['phone'] ?? $input['customer_phone'] ?? $input['customer']['phone'] ?? '';
+            $input['villa_number'] = $input['villa_number'] ?? $input['address']['villa_number'] ?? '';
+            $input['delivery_address'] = is_string($input['address'] ?? null) ? $input['address'] : ($input['delivery_address'] ?? $input['address']['street_address'] ?? '');
 
-                // Find or create customer
-                $customer = Customer::firstOrCreate(
-                    ['phone' => $phone],
-                    ['name' => $name, 'address' => $request->input('delivery_address'), 'total_orders' => 0]
-                );
-                $customer->increment('total_orders');
+            $result = $this->orderCreationService->createOrder($input);
 
-                $orderNumber = 'ORD-' . strtoupper(Str::random(6)) . '-' . rand(100, 999);
-                $subtotal = 0;
+            return $this->successResponse([
+                'order' => $result['order'],
+                'order_number' => $result['order']->order_number,
+                'status' => $result['order']->status,
+                'whatsapp_status' => $result['order']->whatsapp_status,
+                'whatsapp_url' => $result['whatsapp_url'],
+                'message_body' => $result['message_body'],
+                'total_amount' => (string) $result['order']->total_amount,
+                'is_duplicate' => $result['is_duplicate'] ?? false,
+            ], 'Order created successfully', 201);
 
-                // Create Order record
-                $order = Order::create([
-                    'order_number' => $orderNumber,
-                    'customer_id' => $customer->id,
-                    'customer_name' => $name,
-                    'customer_phone' => $phone,
-                    'delivery_address' => $request->input('delivery_address'),
-                    'payment_method' => $request->input('payment_method'),
-                    'status' => 'pending',
-                    'payment_status' => 'pending',
-                    'notes' => $request->input('notes'),
-                    'subtotal' => 0,
-                    'delivery_fee' => 5.00,
-                    'total' => 0,
-                ]);
-
-                foreach ($request->input('items') as $itemData) {
-                    // Fetch authoritative price from DB — Never trust client-side prices!
-                    $product = Product::lockForUpdate()->findOrFail($itemData['product_id']);
-
-                    if ($product->status !== 'active') {
-                        throw new \Exception("Product '{$product->name}' is currently unavailable.");
-                    }
-
-                    if ($product->stock_quantity < $itemData['quantity']) {
-                        throw new \Exception("Insufficient stock for '{$product->name}'. Available: {$product->stock_quantity}");
-                    }
-
-                    $unitPrice = (float) ($product->sale_price ?: $product->price);
-                    $lineTotal = $unitPrice * $itemData['quantity'];
-                    $subtotal += $lineTotal;
-
-                    // Create Order Item
-                    OrderItem::create([
-                        'order_id' => $order->id,
-                        'product_id' => $product->id,
-                        'product_name' => $product->name,
-                        'unit_price' => $unitPrice,
-                        'wholesale_cost' => $product->cost_price ?? 0,
-                        'quantity' => $itemData['quantity'],
-                        'total' => $lineTotal,
-                    ]);
-
-                    // Update Inventory & Record Stock Movement
-                    $prevQuantity = $product->stock_quantity;
-                    $newQuantity = max(0, $prevQuantity - $itemData['quantity']);
-
-                    $product->update(['stock_quantity' => $newQuantity]);
-
-                    StockMovement::create([
-                        'product_id' => $product->id,
-                        'type' => 'sale',
-                        'quantity' => -$itemData['quantity'],
-                        'previous_quantity' => $prevQuantity,
-                        'new_quantity' => $newQuantity,
-                        'reference_type' => 'order',
-                        'reference_id' => $order->id,
-                        'reason' => "Customer Sale Order #{$order->order_number}",
-                    ]);
-                }
-
-                $deliveryFee = 5.00;
-                $grandTotal = $subtotal + $deliveryFee;
-
-                $order->update([
-                    'subtotal' => $subtotal,
-                    'delivery_fee' => $deliveryFee,
-                    'total' => $grandTotal,
-                ]);
-
-                return $order->load('items');
-            });
-
-            return $this->successResponse($order, 'Order created successfully', 201);
         } catch (\Exception $e) {
             return $this->errorResponse($e->getMessage(), [], 400);
         }
@@ -135,14 +81,30 @@ class OrderController extends BaseApiController
     public function show(string $orderNumber): JsonResponse
     {
         $order = Order::where('order_number', $orderNumber)
-            ->with(['items.product'])
+            ->with(['items.product', 'customer'])
             ->first();
 
         if (!$order) {
             return $this->errorResponse('Order not found', [], 404);
         }
 
-        return $this->successResponse($order, 'Order details retrieved successfully');
+        $wa = $this->whatsappService->generateClickToChat($order);
+
+        $data = $order->toArray();
+        $data['whatsapp_url'] = $wa['whatsapp_url'];
+        $data['message_body'] = $wa['message_body'];
+
+        // Timeline progress status builder
+        $data['timeline'] = [
+            ['label' => 'Order Created (Pending)', 'active' => true, 'time' => $order->created_at],
+            ['label' => 'WhatsApp Confirmation Prepared', 'active' => $order->whatsapp_status === 'prepared' || $order->whatsapp_status === 'sent', 'time' => $order->created_at],
+            ['label' => 'Order Accepted by Baqqala', 'active' => in_array($order->status, ['confirmed', 'accepted', 'preparing', 'out_for_delivery', 'delivered']), 'time' => $order->accepted_at],
+            ['label' => 'Preparing Order Items', 'active' => in_array($order->status, ['preparing', 'out_for_delivery', 'delivered']), 'time' => $order->preparing_at],
+            ['label' => 'Out for Villa Delivery', 'active' => in_array($order->status, ['out_for_delivery', 'delivered']), 'time' => $order->out_for_delivery_at],
+            ['label' => 'Delivered to Villa', 'active' => $order->status === 'delivered', 'time' => $order->delivered_at],
+        ];
+
+        return $this->successResponse($data, 'Order details retrieved successfully');
     }
 
     /**
@@ -150,15 +112,23 @@ class OrderController extends BaseApiController
      */
     public function customerHistory(Request $request): JsonResponse
     {
-        $phone = trim($request->input('phone', ''));
-        if (empty($phone)) {
+        $rawPhone = trim($request->input('phone', ''));
+        if (empty($rawPhone)) {
             return $this->errorResponse('Phone number parameter is required', [], 422);
         }
 
-        $orders = Order::where('customer_phone', $phone)
-            ->with('items')
-            ->orderBy('id', 'desc')
-            ->get();
+        $phone = PhoneNumberService::normalize($rawPhone);
+
+        $orders = Order::where(function ($q) use ($phone, $rawPhone) {
+            $q->where('customer_phone_snapshot', $phone)
+              ->orWhere('customer_phone_snapshot', $rawPhone)
+              ->orWhereHas('customer', function ($cq) use ($phone, $rawPhone) {
+                  $cq->where('phone', $phone)->orWhere('phone', $rawPhone);
+              });
+        })
+        ->with('items')
+        ->orderBy('id', 'desc')
+        ->get();
 
         return $this->successResponse($orders, 'Customer orders retrieved successfully');
     }

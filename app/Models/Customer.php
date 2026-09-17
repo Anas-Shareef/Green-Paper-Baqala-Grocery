@@ -31,6 +31,16 @@ class Customer extends Model
         return $this->hasMany(Order::class);
     }
 
+    public function addresses(): HasMany
+    {
+        return $this->hasMany(CustomerAddress::class);
+    }
+
+    public function defaultAddress()
+    {
+        return $this->hasOne(CustomerAddress::class)->where('is_default', true);
+    }
+
     public function getTotalOrdersAttribute(): int
     {
         return $this->orders()->count();

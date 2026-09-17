@@ -109,6 +109,20 @@ export const adminApi = {
     return res.data;
   },
 
+  // Customers Management
+  getCustomers: async (params = {}) => {
+    const res = await client.get(`${getApiBaseUrl()}/admin/customers`, { params });
+    return res.data;
+  },
+  getCustomer: async (id) => {
+    const res = await client.get(`${getApiBaseUrl()}/admin/customers/${id}`);
+    return res.data;
+  },
+  updateCustomer: async (id, payload) => {
+    const res = await client.put(`${getApiBaseUrl()}/admin/customers/${id}`, payload);
+    return res.data;
+  },
+
   // Expenses
   getExpenses: async (params = {}) => {
     const res = await client.get(`${getApiBaseUrl()}/admin/expenses`, { params });

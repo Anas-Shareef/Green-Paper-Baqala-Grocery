@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Package, Tags, Warehouse, ShoppingBag, 
-  Receipt, BarChart3, LogOut, Store, Menu, X, Bell 
+  Receipt, BarChart3, LogOut, Store, Menu, X, Bell, Users 
 } from 'lucide-react';
 import { adminApi } from '../services/api';
 
@@ -17,6 +17,7 @@ export function AdminLayout({ children }) {
     { label: 'Categories', icon: Tags, path: '/categories' },
     { label: 'Inventory', icon: Warehouse, path: '/inventory' },
     { label: 'Orders', icon: ShoppingBag, path: '/orders' },
+    { label: 'Customers', icon: Users, path: '/customers' },
     { label: 'Expenses', icon: Receipt, path: '/expenses' },
     { label: 'Reports', icon: BarChart3, path: '/reports' },
   ];
