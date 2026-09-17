@@ -24,7 +24,7 @@ export const api = {
   getHome: async () => {
     try {
       const res = await client.get(getApiUrl('/home'));
-      return res.data;
+      return res.data?.data || res.data;
     } catch (e) {
       console.error(e);
       return null;
@@ -34,7 +34,7 @@ export const api = {
   getProducts: async (params = {}) => {
     try {
       const res = await client.get(getApiUrl('/products'), { params });
-      return res.data;
+      return res.data?.data || res.data;
     } catch (e) {
       console.error(e);
       return { data: [] };
@@ -44,7 +44,7 @@ export const api = {
   searchProducts: async (q) => {
     try {
       const res = await client.get(getApiUrl('/products/search'), { params: { q } });
-      return res.data;
+      return res.data?.data || res.data;
     } catch (e) {
       console.error(e);
       return [];
@@ -53,26 +53,26 @@ export const api = {
 
   sendOtp: async (phone) => {
     const res = await client.post(getApiUrl('/auth/send-otp'), { phone });
-    return res.data;
+    return res.data?.data || res.data;
   },
 
   verifyOtp: async (payload) => {
     const res = await client.post(getApiUrl('/auth/verify-otp'), payload);
-    return res.data;
+    return res.data?.data || res.data;
   },
 
   submitOrder: async (payload) => {
     const res = await client.post(getApiUrl('/orders'), payload);
-    return res.data;
+    return res.data?.data || res.data;
   },
 
   getOrderTracking: async (orderNumber) => {
     const res = await client.get(getApiUrl(`/orders/${orderNumber}`));
-    return res.data;
+    return res.data?.data || res.data;
   },
 
   getCustomerHistory: async (phone) => {
     const res = await client.get(getApiUrl('/orders/history'), { params: { phone } });
-    return res.data;
+    return res.data?.data || res.data;
   }
 };

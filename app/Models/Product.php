@@ -30,6 +30,10 @@ class Product extends Model
         'status',
     ];
 
+    protected $hidden = [
+        'wholesale_cost',
+    ];
+
     protected $casts = [
         'wholesale_cost' => 'decimal:2',
         'retail_price' => 'decimal:2',
@@ -71,6 +75,11 @@ class Product extends Model
 
     public function getProfitMarginAttribute(): float
     {
-        return (float) ($this->retail_price - $this->wholesale_cost);
+        return (float) (($this->attributes['retail_price'] ?? $this->attributes['price'] ?? 0) - ($this->attributes['wholesale_cost'] ?? 0));
+    }
+
+    public function getPriceAttribute(): float
+    {
+        return (float) ($this->attributes['retail_price'] ?? $this->attributes['price'] ?? 0);
     }
 }
