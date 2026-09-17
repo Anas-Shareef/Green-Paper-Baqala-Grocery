@@ -10,12 +10,6 @@ if (isset($_SERVER['REQUEST_METHOD']) && strtoupper($_SERVER['REQUEST_METHOD']) 
     exit(0);
 }
 
-if (isset($_SERVER['REQUEST_URI']) && str_contains($_SERVER['REQUEST_URI'], 'debug-route')) {
-    header('Content-Type: application/json');
-    echo json_encode($_SERVER, JSON_PRETTY_PRINT);
-    exit(0);
-}
-
 try {
     // 1. Prepare writable paths for Vercel serverless environment (/tmp)
     $tmpStorage = '/tmp/storage';
