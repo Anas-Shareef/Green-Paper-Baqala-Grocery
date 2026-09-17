@@ -52,6 +52,34 @@ class PhoneNumberService
     }
 
     /**
+     * Build canonical address string without duplicated villa or zone labels (PRD Section 8)
+     */
+    public static function formatCanonicalAddress(?string $villa, ?string $street, ?string $zone = null): string
+    {
+        $v = trim($villa ?? '');
+        $s = trim($street ?? '');
+        $z = trim($zone ?? '');
+
+        // Format Villa prefix cleanly
+        if (!empty($v)) {
+            $vFormatted = (str_ireplace('villa', '', $v) === $v) ? "Villa {$v}" : $v;
+        } else {
+            $vFormatted = '';
+        }
+
+        // Deduplicate zone if it already exists inside $s
+        $includeZone = !empty($z) && (stripos($s, $z) === false);
+
+        $parts = array_values(array_filter([
+            $vFormatted,
+            $s,
+            $includeZone ? $z : null,
+        ]));
+
+        return implode(', ', $parts);
+    }
+
+    /**
      * Find existing Customer record matching any format variant of raw or normalized phone number
      */
     public static function findCustomer(?string $rawPhone): ?\App\Models\Customer

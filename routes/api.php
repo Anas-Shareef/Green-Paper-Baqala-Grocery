@@ -82,5 +82,12 @@ Route::prefix('v1')->group(function () {
         Route::delete('/expenses/{id}', [AdminExpenseController::class, 'destroy']);
 
         Route::get('/reports', [AdminReportController::class, 'index']);
+
+        // Admin Realtime Notifications & Push Subscriptions
+        Route::get('/notifications', [\App\Http\Controllers\Api\v1\Admin\AdminNotificationController::class, 'index']);
+        Route::get('/realtime-check', [\App\Http\Controllers\Api\v1\Admin\AdminNotificationController::class, 'realtimeCheck']);
+        Route::post('/notifications/{id}/read', [\App\Http\Controllers\Api\v1\Admin\AdminNotificationController::class, 'markAsRead']);
+        Route::post('/notifications/mark-all-read', [\App\Http\Controllers\Api\v1\Admin\AdminNotificationController::class, 'markAllAsRead']);
+        Route::post('/push-subscriptions', [\App\Http\Controllers\Api\v1\Admin\AdminNotificationController::class, 'subscribePush']);
     });
 });

@@ -11,12 +11,18 @@ import { CustomersPage } from './pages/CustomersPage';
 import { ExpensesPage } from './pages/ExpensesPage';
 import { ReportsPage } from './pages/ReportsPage';
 
+import { AdminRealtimeProvider } from './context/AdminRealtimeContext';
+
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem('admin_token');
   if (!token) {
     return <Navigate to="/login" replace />;
   }
-  return <AdminLayout>{children}</AdminLayout>;
+  return (
+    <AdminRealtimeProvider>
+      <AdminLayout>{children}</AdminLayout>
+    </AdminRealtimeProvider>
+  );
 }
 
 export default function App() {

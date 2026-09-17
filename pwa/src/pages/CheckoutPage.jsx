@@ -223,10 +223,13 @@ export const CheckoutPage = ({ cart, customer, onOrderSuccess, onBackToCart }) =
             <span className="text-[11px] font-black text-emerald-800 uppercase tracking-widest bg-emerald-100 px-3 py-1 rounded-full">
               ✓ ORDER CREATED IN SYSTEM
             </span>
-            <h2 className="text-3xl font-black text-slate-900 font-mono mt-3">
-              {orderCreatedData.order_number || 'ORD-000000'}
+            <h2 className="text-3xl font-black text-emerald-800 font-mono mt-3">
+              Order #{orderCreatedData.order?.customer_order_number || orderCreatedData.customer_order_number || '1'}
             </h2>
-            <p className="text-xs text-slate-600 font-medium">
+            <p className="text-xs text-slate-500 font-mono pt-0.5">
+              Baqqala Order ID: {orderCreatedData.order_number || orderCreatedData.order?.order_number || 'ORD-000000'}
+            </p>
+            <p className="text-xs text-slate-600 font-medium pt-1">
               Opening WhatsApp with your prefilled order message...
             </p>
           </div>
@@ -410,7 +413,7 @@ export const CheckoutPage = ({ cart, customer, onOrderSuccess, onBackToCart }) =
                             </div>
                           </div>
                           <div className="text-xs text-slate-800 font-medium">
-                            {addr.street_address} {addr.zone ? `, ${addr.zone}` : ''}
+                            {addr.street_address} {addr.zone && !addr.street_address.includes(addr.zone) ? `, ${addr.zone}` : ''}
                           </div>
                           {addr.landmark && (
                             <div className="text-[11px] text-slate-500">

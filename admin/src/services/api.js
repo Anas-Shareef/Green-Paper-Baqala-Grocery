@@ -146,4 +146,26 @@ export const adminApi = {
     });
     return res.data;
   },
+
+  // Realtime Notifications & Push API
+  getNotifications: async () => {
+    const res = await client.get(`${getApiBaseUrl()}/admin/notifications`);
+    return res.data;
+  },
+  realtimeCheck: async (sinceId = 0) => {
+    const res = await client.get(`${getApiBaseUrl()}/admin/realtime-check`, { params: { since_id: sinceId } });
+    return res.data;
+  },
+  markNotificationRead: async (id) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/notifications/${id}/read`);
+    return res.data;
+  },
+  markAllNotificationsRead: async () => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/notifications/mark-all-read`);
+    return res.data;
+  },
+  subscribePush: async (payload) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/push-subscriptions`, payload);
+    return res.data;
+  },
 };

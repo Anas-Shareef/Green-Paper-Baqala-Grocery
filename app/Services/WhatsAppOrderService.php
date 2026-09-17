@@ -24,17 +24,19 @@ class WhatsAppOrderService
             : "FREE";
         $totalFormatted = number_format((float) $order->total_amount, 2);
 
+        $customerOrderNum = $order->customer_order_number ?: 1;
         $customerName = $order->customer_name_snapshot ?: ($order->customer->name ?? 'Guest Customer');
-        $customerPhone = $order->customer_phone_snapshot ?: ($order->customer->phone ?? '');
-        $villa = $order->customer_villa ? "Villa {$order->customer_villa}" : "Villa N/A";
-        $address = $order->customer_address ?: 'Standard Villa Delivery';
+        $customerPhone = PhoneNumberService::formatForWhatsApp($order->customer_phone_snapshot ?: ($order->customer->phone ?? ''));
+        
+        $canonicalAddress = PhoneNumberService::formatCanonicalAddress($order->customer_villa, $order->customer_address);
         $notes = $order->customer_notes_snapshot ?: $order->notes ?: '';
 
         $msg = "Hello Baqqala,\n\n";
         $msg .= "I would like to place an order.\n\n";
-        $msg .= "Order: *{$order->order_number}*\n\n";
+        $msg .= "Customer Order: #{$customerOrderNum}\n";
+        $msg .= "Baqqala Order ID: {$order->order_number}\n\n";
         $msg .= "Customer:\n{$customerName}\n{$customerPhone}\n\n";
-        $msg .= "Delivery Address:\n{$villa}\n{$address}\n";
+        $msg .= "Delivery Address:\n{$canonicalAddress}\n";
         if (!empty($notes)) {
             $msg .= "Notes: {$notes}\n";
         }

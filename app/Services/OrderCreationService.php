@@ -112,11 +112,22 @@ class OrderCreationService
                 }
             }
 
-            // Sequential / Unique Order Number
+            // 5. Customer Sequential Order Number (PRD Priority 1)
+            $customerOrderCount = Order::where('customer_id', $customer->id)->count();
+            $customerOrderNumber = $customerOrderCount + 1;
+
+            // Sequential / Unique Global Order Number
             $nextId = (Order::max('id') ?? 0) + 1;
             $orderNumber = 'ORD-' . str_pad((string)$nextId, 6, '0', STR_PAD_LEFT);
 
-            // 5. Order Calculation & Items
+            // Canonical address formatting (PRD Section 8)
+            $canonicalAddress = PhoneNumberService::formatCanonicalAddress(
+                $address->villa_number ?? null,
+                $address->street_address ?? null,
+                $address->zone ?? null
+            );
+
+            // 6. Order Calculation & Items
             $subtotal = 0;
             $itemsToCreate = [];
 
@@ -155,14 +166,15 @@ class OrderCreationService
                 throw new \InvalidArgumentException('Only Cash on Delivery (COD) is supported.');
             }
 
-            // 6. Create Order Record with Address Snapshot
+            // 7. Create Order Record with Address Snapshot
             $order = Order::create([
                 'order_number' => $orderNumber,
+                'customer_order_number' => $customerOrderNumber,
                 'customer_id' => $customer->id,
                 'customer_name_snapshot' => $customer->name,
                 'customer_phone_snapshot' => $customer->phone,
-                'customer_villa' => $address->villa_number,
-                'customer_address' => $address->street_address . ($address->zone ? ", {$address->zone}" : ''),
+                'customer_villa' => $address->villa_number ?? null,
+                'customer_address' => $canonicalAddress,
                 'customer_notes_snapshot' => $data['notes'] ?? $address->delivery_notes ?? null,
                 'subtotal' => $subtotal,
                 'delivery_charge' => $deliveryFee,
@@ -175,6 +187,20 @@ class OrderCreationService
                 'order_source' => $data['order_source'] ?? 'PWA',
                 'notes' => $data['notes'] ?? null,
             ]);
+
+            // Create AdminNotification Record for Realtime Admin Listening
+            try {
+                if (\Illuminate\Support\Facades\Schema::hasTable('admin_notifications')) {
+                    \App\Models\AdminNotification::create([
+                        'type' => 'new_order',
+                        'title' => 'New Order Received',
+                        'message' => "Order {$order->order_number} (Customer Order #{$customerOrderNumber}) from {$customer->name}",
+                        'order_id' => $order->id,
+                        'order_number' => $order->order_number,
+                        'is_read' => false,
+                    ]);
+                }
+            } catch (\Throwable $e) {}
 
             // 7. Create Order Items & Deduct Stock
             foreach ($itemsToCreate as $i) {

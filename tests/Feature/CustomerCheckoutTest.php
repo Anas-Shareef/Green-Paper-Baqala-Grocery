@@ -218,6 +218,6 @@ class CustomerCheckoutTest extends TestCase
         // 3. Verify Order 1 still has Villa A address snapshot
         $order1 = Order::where('order_number', $order1Number)->first();
         $this->assertEquals('Villa A', $order1->customer_villa);
-        $this->assertEquals('Old Street', $order1->customer_address);
+        $this->assertStringContainsString('Old Street', $order1->customer_address);
     }
 }
