@@ -115,6 +115,13 @@ try {
 
     // Forward request to Laravel public index
     require __DIR__ . '/../public/index.php';
+
+    // Cleanly close database connections in serverless environment to prevent stale pooler sockets
+    if (class_exists(\Illuminate\Support\Facades\DB::class)) {
+        try {
+            \Illuminate\Support\Facades\DB::disconnect();
+        } catch (\Throwable $e) {}
+    }
 } catch (\Throwable $e) {
     http_response_code(500);
     echo "<h1>Baqqala Serverless Diagnostics</h1>";
