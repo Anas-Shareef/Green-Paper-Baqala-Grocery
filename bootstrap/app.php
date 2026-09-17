@@ -47,7 +47,7 @@ if (getenv('APP_STORAGE') || isset($_ENV['APP_STORAGE'])) {
 
 // Failsafe to prevent empty driver strings from breaking Laravel Manager
 $app->booting(function () {
-    if (empty(config('session.driver'))) config(['session.driver' => 'cookie']);
+    if (empty(config('session.driver'))) config(['session.driver' => 'array']);
     if (empty(config('cache.default'))) config(['cache.default' => 'array']);
     if (empty(config('queue.default'))) config(['queue.default' => 'sync']);
     if (empty(config('filesystems.default'))) config(['filesystems.default' => 'local']);

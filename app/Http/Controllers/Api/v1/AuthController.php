@@ -32,9 +32,7 @@ class AuthController extends BaseApiController
         $user = User::where('email', $email)->first();
 
         if ($user && ($password === 'password' || Hash::check($password, $user->password))) {
-            Auth::login($user, true);
-
-            // Generate token (Sanctum or plain token)
+            // Generate bearer token for stateless API authentication
             $token = method_exists($user, 'createToken')
                 ? $user->createToken('auth-token')->plainTextToken
                 : base64_encode($user->id . ':' . time());
@@ -170,6 +168,8 @@ class AuthController extends BaseApiController
     {
         if (Auth::check()) {
             Auth::logout();
+        }
+        if ($request->hasSession()) {
             $request->session()->invalidate();
         }
 
