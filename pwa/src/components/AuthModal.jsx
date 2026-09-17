@@ -47,94 +47,94 @@ export const AuthModal = ({ isOpen, onClose, onAuthenticated }) => {
   };
 
   return (
-    <div class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
-      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4">
+    <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4 text-slate-900">
         
-        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div class="flex items-center gap-2">
-            <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
-              <Phone class="w-4 h-4" />
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+              <Phone className="w-4 h-4" />
             </div>
             <div>
-              <h3 class="font-extrabold text-white text-sm">Customer Phone OTP</h3>
-              <p class="text-[10px] text-slate-400">Baqqala Verification</p>
+              <h3 className="font-extrabold text-slate-900 text-sm">Customer Phone OTP</h3>
+              <p className="text-[10px] text-slate-500 font-medium">Baqqala Verification</p>
             </div>
           </div>
-          <button onClick={onClose} class="text-slate-400 hover:text-white">&times;</button>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 font-bold">&times;</button>
         </div>
 
         {error && (
-          <div class="p-3 bg-rose-950/80 border border-rose-500/50 text-rose-300 rounded-xl text-xs font-semibold">
+          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-semibold">
             {error}
           </div>
         )}
 
         {step === 'phone' ? (
-          <form onSubmit={handleSendOtp} class="space-y-3 text-xs">
+          <form onSubmit={handleSendOtp} className="space-y-3 text-xs">
             <div>
-              <label class="block font-bold text-slate-300 mb-1">Mobile Phone Number *</label>
+              <label className="block font-bold text-slate-700 mb-1">Mobile Phone Number *</label>
               <input
                 type="text"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 required
                 placeholder="e.g. 971501112233"
-                class="w-full bg-slate-950 border border-slate-800 text-white font-mono font-bold rounded-xl px-3 py-2.5 outline-none focus:border-emerald-500"
+                className="w-full bg-slate-50 border border-slate-300 text-slate-900 font-mono font-bold rounded-xl px-3 py-2.5 outline-none focus:border-emerald-600 focus:bg-white transition-colors"
               />
             </div>
 
-            <div class="bg-slate-950 p-3 rounded-xl border border-slate-800/80 text-[11px] text-emerald-400 font-mono">
-              Demo Helper: OTP code <strong class="text-white">1234</strong> will be auto-generated.
+            <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100 text-[11px] text-emerald-800 font-mono">
+              Demo Helper: OTP code <strong className="text-emerald-950 font-bold">1234</strong> will be auto-generated.
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              class="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-500/20"
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-600/20"
             >
               {loading ? 'Sending Code...' : 'Send Verification OTP'}
             </button>
           </form>
         ) : (
-          <form onSubmit={handleVerifyOtp} class="space-y-3 text-xs">
+          <form onSubmit={handleVerifyOtp} className="space-y-3 text-xs">
             <div>
-              <label class="block font-bold text-slate-300 mb-1">Enter 4-Digit OTP Code *</label>
+              <label className="block font-bold text-slate-700 mb-1">Enter 4-Digit OTP Code *</label>
               <input
                 type="text"
                 value={otp}
                 onChange={(e) => setOtp(e.target.value)}
                 required
                 placeholder="1234"
-                class="w-full bg-slate-950 border border-slate-800 text-emerald-400 font-mono font-extrabold text-center tracking-widest text-lg rounded-xl py-2 outline-none focus:border-emerald-500"
+                className="w-full bg-slate-50 border border-slate-300 text-emerald-700 font-mono font-extrabold text-center tracking-widest text-lg rounded-xl py-2 outline-none focus:border-emerald-600 focus:bg-white transition-colors"
               />
             </div>
 
             <div>
-              <label class="block font-bold text-slate-300 mb-1">Your Full Name</label>
+              <label className="block font-bold text-slate-700 mb-1">Your Full Name</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Muhammed Al Nuaimi"
-                class="w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-3 py-2 outline-none focus:border-emerald-500"
+                className="w-full bg-slate-50 border border-slate-300 text-slate-900 rounded-xl px-3 py-2 outline-none focus:border-emerald-600 focus:bg-white transition-colors"
               />
             </div>
 
             <div>
-              <label class="block font-bold text-slate-300 mb-1">Villa Number / Location</label>
+              <label className="block font-bold text-slate-700 mb-1">Villa Number / Location</label>
               <input
                 type="text"
                 value={villaNumber}
                 onChange={(e) => setVillaNumber(e.target.value)}
                 placeholder="e.g. Villa 12, Zone A"
-                class="w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-3 py-2 outline-none focus:border-emerald-500"
+                className="w-full bg-slate-50 border border-slate-300 text-slate-900 rounded-xl px-3 py-2 outline-none focus:border-emerald-600 focus:bg-white transition-colors"
               />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              class="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-500/20"
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-600/20"
             >
               {loading ? 'Verifying...' : 'Verify & Access Profile'}
             </button>

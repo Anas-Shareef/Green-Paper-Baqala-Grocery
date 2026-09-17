@@ -16,8 +16,8 @@ export const CatalogPage = ({ categories, products, cart, onAddToCart, onUpdateQ
   return (
     <div className="space-y-4 pb-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-extrabold text-white">All Grocery Catalog</h2>
-        <span className="text-xs text-slate-400 font-semibold">{filteredProducts.length} Items</span>
+        <h2 className="text-xl font-extrabold text-slate-900">All Grocery Catalog</h2>
+        <span className="text-xs text-slate-500 font-semibold">{filteredProducts.length} Items</span>
       </div>
 
       {/* Category Filter Pills */}
@@ -25,7 +25,7 @@ export const CatalogPage = ({ categories, products, cart, onAddToCart, onUpdateQ
         <button
           onClick={() => setSelectedCatId(null)}
           className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-            selectedCatId === null ? 'bg-emerald-500 text-slate-950 shadow-md' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'
+            selectedCatId === null ? 'bg-emerald-600 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-700 hover:bg-emerald-50'
           }`}
         >
           All Items
@@ -36,7 +36,7 @@ export const CatalogPage = ({ categories, products, cart, onAddToCart, onUpdateQ
             key={c.id}
             onClick={() => setSelectedCatId(c.id)}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-              selectedCatId === c.id ? 'bg-emerald-500 text-slate-950 shadow-md' : 'bg-slate-900 text-slate-300 hover:bg-slate-800'
+              selectedCatId === c.id ? 'bg-emerald-600 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-700 hover:bg-emerald-50'
             }`}
           >
             {c.name}
