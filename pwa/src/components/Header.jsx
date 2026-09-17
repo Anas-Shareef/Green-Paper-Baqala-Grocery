@@ -22,7 +22,7 @@ export const Header = ({ onSearch, cartCount, onOpenCart, customer, onOpenAuth }
         </div>
         
         <button onClick={onOpenAuth} className="text-emerald-700 hover:underline font-semibold flex items-center gap-1">
-          {customer ? customer.name.split(' ')[0] : 'Sign In / OTP'}
+          {customer ? customer.name.split(' ')[0] : 'Guest Delivery'}
         </button>
       </div>
 

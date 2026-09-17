@@ -33,13 +33,13 @@ export const HomePage = ({
           </h2>
           
           <p className="text-xs text-emerald-100 leading-relaxed font-medium">
-            Fresh milk, eggs, bakery, beverages & fresh produce. Minimum order value ₹{mov} for free delivery.
+            Fresh milk, eggs, bakery, beverages & fresh produce. Minimum order value AED {mov} for free delivery.
           </p>
 
           <div className="pt-2 flex items-center gap-4 text-xs font-bold text-emerald-100">
             <div className="flex items-center gap-1.5">
               <Truck className="w-4 h-4 text-white" />
-              Free Delivery &ge; ₹{mov}
+              Free Delivery &ge; AED {mov}
             </div>
             <div className="flex items-center gap-1.5">
               <Clock className="w-4 h-4 text-white" />
