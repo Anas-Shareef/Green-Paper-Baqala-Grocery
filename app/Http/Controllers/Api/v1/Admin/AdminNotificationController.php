@@ -31,30 +31,43 @@ class AdminNotificationController extends BaseApiController
      */
     public function realtimeCheck(Request $request): JsonResponse
     {
-        $sinceId = (int) $request->input('since_id', 0);
+        try {
+            $sinceId = (int) $request->input('since_id', 0);
 
-        $allNotifications = AdminNotification::orderBy('id', 'desc')->take(30)->get();
-        $newNotifications = AdminNotification::where('id', '>', $sinceId)
-            ->orderBy('id', 'asc')
-            ->get();
+            $allNotifications = AdminNotification::orderBy('id', 'desc')->take(30)->get();
+            $newNotifications = AdminNotification::where('id', '>', $sinceId)
+                ->orderBy('id', 'asc')
+                ->get();
 
-        $unreadCount = AdminNotification::where('is_read', false)->count();
-        $pendingOrdersCount = Order::whereIn('status', ['pending', 'awaiting_whatsapp'])->count();
-        
-        $latestPendingOrders = Order::whereIn('status', ['pending', 'awaiting_whatsapp'])
-            ->orderBy('id', 'desc')
-            ->take(10)
-            ->with('items')
-            ->get();
+            $unreadCount = AdminNotification::where('is_read', false)->count();
+            $pendingOrdersCount = Order::whereIn('status', ['pending', 'awaiting_whatsapp'])->count();
+            
+            $latestPendingOrders = Order::whereIn('status', ['pending', 'awaiting_whatsapp'])
+                ->orderBy('id', 'desc')
+                ->take(10)
+                ->with('items')
+                ->get();
 
-        return $this->successResponse([
-            'notifications' => $allNotifications,
-            'new_notifications' => $newNotifications,
-            'unread_count' => $unreadCount,
-            'pending_orders_count' => $pendingOrdersCount,
-            'latest_pending_orders' => $latestPendingOrders,
-            'latest_notification_id' => AdminNotification::max('id') ?? 0,
-        ], 'Realtime check completed');
+            return $this->successResponse([
+                'notifications' => $allNotifications,
+                'new_notifications' => $newNotifications,
+                'unread_count' => $unreadCount,
+                'pending_orders_count' => $pendingOrdersCount,
+                'latest_pending_orders' => $latestPendingOrders,
+                'latest_notification_id' => AdminNotification::max('id') ?? 0,
+            ], 'Realtime check completed');
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Realtime check error: ' . $e->getMessage());
+            return $this->successResponse([
+                'notifications' => [],
+                'new_notifications' => [],
+                'unread_count' => 0,
+                'pending_orders_count' => 0,
+                'latest_pending_orders' => [],
+                'latest_notification_id' => 0,
+                'error_detail' => $e->getMessage(),
+            ], 'Realtime check completed with fallback');
+        }
     }
 
     /**

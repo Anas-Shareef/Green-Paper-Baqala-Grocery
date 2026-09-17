@@ -15,6 +15,14 @@ export const CheckoutPage = ({ cart, customer, onOrderSuccess, onBackToCart }) =
 
   const [isEditingAddress, setIsEditingAddress] = useState(false);
 
+  // New Customer & Edit Address Form State
+  const [newCustomerName, setNewCustomerName] = useState('');
+  const [newVillaNumber, setNewVillaNumber] = useState('');
+  const [newStreetAddress, setNewStreetAddress] = useState('');
+  const [newZone, setNewZone] = useState('');
+  const [newLandmark, setNewLandmark] = useState('');
+  const [newDeliveryNotes, setNewDeliveryNotes] = useState('');
+
   // Sync edit address fields when recognized customer selected address changes
   useEffect(() => {
     if (recognizedCustomer) {
