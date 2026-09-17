@@ -142,9 +142,19 @@ export const CheckoutPage = ({ cart, customer, onOrderSuccess, onBackToCart }) =
     };
 
     if (recognitionStatus === 'recognized') {
-      payload.customer_phone = recognizedCustomer.phone;
-      payload.customer_name = recognizedCustomer.name;
-      payload.address_id = selectedAddressId;
+      payload.customer_phone = recognizedCustomer?.phone || normalizedPhone;
+      payload.customer_name = recognizedCustomer?.name || 'Recognized Customer';
+      
+      if (selectedAddressId && (typeof selectedAddressId === 'number' || /^\d+$/.test(String(selectedAddressId)))) {
+        payload.address_id = parseInt(selectedAddressId, 10);
+      }
+      
+      const selectedAddr = savedAddresses.find(a => a.id === selectedAddressId) || savedAddresses[0];
+      if (selectedAddr) {
+        payload.villa_number = selectedAddr.villa_number || 'Villa';
+        payload.delivery_address = selectedAddr.street_address || 'Villa Delivery';
+        payload.zone = selectedAddr.zone || '';
+      }
     } else {
       payload.customer_phone = normalizedPhone || normalizePhoneNumber(phoneInput);
       payload.customer_name = newCustomerName.trim();

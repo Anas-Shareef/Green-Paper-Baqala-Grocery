@@ -66,30 +66,49 @@ class OrderCreationService
 
             // 4. Address Processing
             $address = null;
-            if (!empty($data['address_id'])) {
-                $address = CustomerAddress::where('customer_id', $customer->id)->find($data['address_id']);
+            $rawAddressId = $data['address_id'] ?? null;
+
+            if (!empty($rawAddressId) && is_numeric($rawAddressId)) {
+                try {
+                    if (\Illuminate\Support\Facades\Schema::hasTable('customer_addresses')) {
+                        $address = CustomerAddress::where('customer_id', $customer->id)->find($rawAddressId);
+                    }
+                } catch (\Throwable $e) {}
             }
 
             if (!$address) {
-                $villa = trim($data['villa_number'] ?? $data['address']['villa_number'] ?? '');
-                $street = trim($data['delivery_address'] ?? $data['address']['street_address'] ?? '');
-                $zone = trim($data['zone'] ?? $data['address']['zone'] ?? '');
+                $villa = trim($data['villa_number'] ?? $data['address']['villa_number'] ?? $customer->villa_number ?? 'Villa');
+                $street = trim($data['delivery_address'] ?? $data['address']['street_address'] ?? $customer->address ?? ($customer->zone ? "Zone {$customer->zone}" : 'Villa Delivery'));
+                $zone = trim($data['zone'] ?? $data['address']['zone'] ?? $customer->zone ?? '');
                 $notes = trim($data['notes'] ?? $data['address']['delivery_notes'] ?? '');
 
-                $isFirstAddress = $customer->addresses()->count() === 0;
+                try {
+                    if (\Illuminate\Support\Facades\Schema::hasTable('customer_addresses')) {
+                        $isFirstAddress = CustomerAddress::where('customer_id', $customer->id)->count() === 0;
 
-                $address = CustomerAddress::create([
-                    'customer_id' => $customer->id,
-                    'label' => $data['address_label'] ?? 'Home',
-                    'villa_number' => $villa,
-                    'street_address' => $street,
-                    'zone' => $zone,
-                    'delivery_notes' => $notes,
-                    'is_default' => $isFirstAddress || !empty($data['is_default']),
-                ]);
+                        $address = CustomerAddress::create([
+                            'customer_id' => $customer->id,
+                            'label' => $data['address_label'] ?? 'Home',
+                            'villa_number' => $villa,
+                            'street_address' => $street,
+                            'zone' => $zone,
+                            'delivery_notes' => $notes,
+                            'is_default' => $isFirstAddress || !empty($data['is_default']),
+                        ]);
 
-                if ($isFirstAddress || !empty($data['is_default'])) {
-                    $customer->addresses()->where('id', '!=', $address->id)->update(['is_default' => false]);
+                        if ($isFirstAddress || !empty($data['is_default'])) {
+                            CustomerAddress::where('customer_id', $customer->id)->where('id', '!=', $address->id)->update(['is_default' => false]);
+                        }
+                    }
+                } catch (\Throwable $e) {}
+
+                if (!$address) {
+                    $address = (object) [
+                        'villa_number' => $villa,
+                        'street_address' => $street,
+                        'zone' => $zone,
+                        'delivery_notes' => $notes,
+                    ];
                 }
             }
 
