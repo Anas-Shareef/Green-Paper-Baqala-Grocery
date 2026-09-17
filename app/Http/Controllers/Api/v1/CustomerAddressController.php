@@ -16,45 +16,73 @@ class CustomerAddressController extends BaseApiController
      */
     public function recognize(Request $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'phone' => 'required|string',
-        ]);
+        try {
+            $validator = Validator::make($request->all(), [
+                'phone' => 'required|string',
+            ]);
 
-        if ($validator->fails()) {
-            return $this->errorResponse('Valid phone number is required', $validator->errors(), 422);
-        }
+            if ($validator->fails()) {
+                return $this->errorResponse('Valid phone number is required', $validator->errors(), 422);
+            }
 
-        $rawPhone = $request->input('phone');
-        $phone = PhoneNumberService::normalize($rawPhone);
-        if (empty($phone)) {
-            return $this->errorResponse('Please enter a valid UAE mobile number.', [], 422);
-        }
+            $rawPhone = $request->input('phone');
+            $phone = PhoneNumberService::normalize($rawPhone);
+            if (empty($phone)) {
+                return $this->errorResponse('Please enter a valid UAE mobile number.', [], 422);
+            }
 
-        $customer = PhoneNumberService::findCustomer($rawPhone);
+            $customer = PhoneNumberService::findCustomer($rawPhone);
 
-        if (!$customer) {
+            if (!$customer) {
+                return $this->successResponse([
+                    'customer_exists' => false,
+                    'phone' => $phone,
+                    'customer' => null,
+                    'addresses' => [],
+                ], 'Mobile number is available for a new guest order.');
+            }
+
+            // Safe customer address loading
+            $addresses = [];
+            try {
+                if (\Illuminate\Support\Facades\Schema::hasTable('customer_addresses')) {
+                    $addresses = $customer->addresses()->orderBy('is_default', 'desc')->orderBy('id', 'desc')->get()->toArray();
+                }
+            } catch (\Throwable $e) {
+                $addresses = [];
+            }
+
+            // Virtual fallback address card from customer's legacy columns if no customer_addresses exist
+            if (empty($addresses) && ($customer->villa_number || $customer->address || $customer->zone)) {
+                $addresses = [
+                    [
+                        'id' => 'legacy-' . $customer->id,
+                        'customer_id' => $customer->id,
+                        'label' => 'Home',
+                        'villa_number' => $customer->villa_number ?: 'Villa',
+                        'street_address' => $customer->address ?: ($customer->zone ? "Zone {$customer->zone}" : 'Villa Delivery'),
+                        'zone' => $customer->zone,
+                        'landmark' => null,
+                        'delivery_notes' => null,
+                        'is_default' => true,
+                    ]
+                ];
+            }
+
             return $this->successResponse([
-                'customer_exists' => false,
+                'customer_exists' => true,
                 'phone' => $phone,
-                'customer' => null,
-                'addresses' => [],
-            ], 'Mobile number is available for a new guest order.');
+                'customer' => [
+                    'id' => $customer->id,
+                    'name' => $customer->name,
+                    'phone' => $customer->phone ?: $phone,
+                ],
+                'addresses' => $addresses,
+            ], 'Customer Recognized');
+
+        } catch (\Throwable $e) {
+            return $this->errorResponse('Unable to recognize customer profile: ' . $e->getMessage(), [], 500);
         }
-
-        $customer->load(['addresses' => function ($q) {
-            $q->orderBy('is_default', 'desc')->orderBy('id', 'desc');
-        }]);
-
-        return $this->successResponse([
-            'customer_exists' => true,
-            'phone' => $phone,
-            'customer' => [
-                'id' => $customer->id,
-                'name' => $customer->name,
-                'phone' => $customer->phone,
-            ],
-            'addresses' => $customer->addresses,
-        ], 'Customer Recognized');
     }
 
     /**
