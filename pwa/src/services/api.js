@@ -7,7 +7,7 @@ const getApiBaseUrl = () => {
   if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
     return 'http://localhost:8000/api';
   }
-  return 'https://baqqala-admin.vercel.app/api/index.php/api';
+  return 'https://baqqala-admin.vercel.app/api';
 };
 
 const API_BASE_URL = getApiBaseUrl();

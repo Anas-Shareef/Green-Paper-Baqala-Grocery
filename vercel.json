@@ -5,7 +5,6 @@
     {
       "source": "/api/(.*)",
       "headers": [
-        { "key": "Access-Control-Allow-Credentials", "value": "true" },
         { "key": "Access-Control-Allow-Origin", "value": "*" },
         { "key": "Access-Control-Allow-Methods", "value": "GET,OPTIONS,PATCH,DELETE,POST,PUT" },
         { "key": "Access-Control-Allow-Headers", "value": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, Origin" }
@@ -19,32 +18,25 @@
     }
   ],
   "builds": [
-    {
-      "src": "api/index.php",
-      "use": "vercel-php"
-    }
+    { "src": "api/index.php", "use": "vercel-php" },
+    { "src": "api/home.php", "use": "vercel-php" },
+    { "src": "api/products.php", "use": "vercel-php" },
+    { "src": "api/categories.php", "use": "vercel-php" },
+    { "src": "api/orders.php", "use": "vercel-php" },
+    { "src": "api/auth.php", "use": "vercel-php" }
   ],
   "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/index.php"
-    },
-    {
-      "src": "/build/(.*)",
-      "dest": "/public/build/$1"
-    },
-    {
-      "src": "/favicon.ico",
-      "dest": "/public/favicon.ico"
-    },
-    {
-      "src": "/robots.txt",
-      "dest": "/public/robots.txt"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/api/index.php"
-    }
+    { "src": "/api/home", "dest": "/api/home.php" },
+    { "src": "/api/products/(.*)", "dest": "/api/products.php" },
+    { "src": "/api/products", "dest": "/api/products.php" },
+    { "src": "/api/categories", "dest": "/api/categories.php" },
+    { "src": "/api/orders/(.*)", "dest": "/api/orders.php" },
+    { "src": "/api/orders", "dest": "/api/orders.php" },
+    { "src": "/api/auth/(.*)", "dest": "/api/auth.php" },
+    { "src": "/build/(.*)", "dest": "/public/build/$1" },
+    { "src": "/favicon.ico", "dest": "/public/favicon.ico" },
+    { "src": "/robots.txt", "dest": "/public/robots.txt" },
+    { "src": "/(.*)", "dest": "/api/index.php" }
   ],
   "env": {
     "PHP_VERSION": "8.3",
