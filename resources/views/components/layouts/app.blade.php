@@ -466,6 +466,9 @@
             lastNotificationId: 0,
 
             initNotifications() {
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.register('/sw.js').catch(e => console.error(e));
+                }
                 this.fetchCheck();
                 setInterval(() => this.fetchCheck(), 3000);
             },
@@ -487,13 +490,30 @@
                                 if (this.soundEnabled) {
                                     this.playChime();
                                 }
+                                // Native OS System Notification (Desktop Banner & Mobile Device OS Banner)
                                 if ('Notification' in window && Notification.permission === 'granted') {
                                     try {
-                                        new Notification(newest.title || '🛒 New Baqqala Order', {
+                                        const notif = new Notification(newest.title || '🛒 New Baqqala Order', {
                                             body: newest.message || 'New order received',
                                             icon: '/favicon.ico',
+                                            tag: 'order-' + newest.id,
+                                            data: { url: '/admin/orders' },
                                         });
-                                    } catch (e) {}
+                                        notif.onclick = function() {
+                                            window.focus();
+                                            window.location.href = '/admin/orders';
+                                        };
+                                    } catch (e) {
+                                        if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+                                            navigator.serviceWorker.ready.then(reg => {
+                                                reg.showNotification(newest.title || '🛒 New Baqqala Order', {
+                                                    body: newest.message || 'New order received',
+                                                    icon: '/favicon.ico',
+                                                    data: { url: '/admin/orders' }
+                                                });
+                                            });
+                                        }
+                                    }
                                 }
                                 if (window.Livewire) {
                                     Livewire.dispatch('orderReceived');
