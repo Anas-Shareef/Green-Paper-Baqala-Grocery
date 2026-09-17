@@ -21,7 +21,7 @@ class AdminDashboardController extends BaseApiController
 
         $todaySales = Order::whereDate('created_at', $today)
             ->where('status', '!=', 'cancelled')
-            ->sum('total');
+            ->sum('total_amount');
 
         $todayOrdersCount = Order::whereDate('created_at', $today)->count();
 

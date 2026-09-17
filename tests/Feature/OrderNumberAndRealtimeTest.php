@@ -140,4 +140,37 @@ class OrderNumberAndRealtimeTest extends TestCase
         $res4->assertStatus(200);
         $res4->assertJsonPath('success', true);
     }
+
+    public function test_database_health_check_endpoint()
+    {
+        $res = $this->getJson('/api/v1/health/database');
+        $res->assertStatus(200);
+        $res->assertJsonPath('success', true);
+        $res->assertJsonPath('data.application', 'ok');
+        $res->assertJsonPath('data.database', 'connected');
+        $this->assertNotNull($res->json('data.database_driver'));
+    }
+
+    public function test_customer_profile_update_without_duplicate()
+    {
+        $customer = Customer::create([
+            'name' => 'Original Name',
+            'phone' => '+971501234567',
+            'status' => 'active',
+        ]);
+
+        $res = $this->putJson('/api/v1/customer/profile', [
+            'customer_id' => $customer->id,
+            'name' => 'Updated Name',
+            'phone' => '0509998877',
+        ]);
+
+        $res->assertStatus(200);
+        $res->assertJsonPath('data.customer.name', 'Updated Name');
+        $res->assertJsonPath('data.customer.phone', '+971509998877');
+
+        // Verify no duplicate customer record created
+        $this->assertEquals(1, Customer::where('id', $customer->id)->count());
+        $this->assertEquals('+971509998877', $customer->fresh()->phone);
+    }
 }

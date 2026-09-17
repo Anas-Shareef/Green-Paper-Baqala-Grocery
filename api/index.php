@@ -33,6 +33,12 @@ try {
         }
     }
 
+    // Detect database configuration: Supabase PostgreSQL vs SQLite fallback
+    $dbDriver = getenv('DB_CONNECTION') ?: ($_ENV['DB_CONNECTION'] ?? 'sqlite');
+    $dbHost = getenv('DB_HOST') ?: ($_ENV['DB_HOST'] ?? '');
+
+    $isPgsql = ($dbDriver === 'pgsql' || !empty($dbHost));
+
     // Mandatory Environment Variables for Vercel serverless execution
     $forcedEnv = [
         'APP_STORAGE' => $tmpStorage,
@@ -45,7 +51,7 @@ try {
         'FILESYSTEM_DISK' => 'local',
         'MAIL_MAILER' => 'log',
         'BROADCAST_CONNECTION' => 'null',
-        'DB_CONNECTION' => 'sqlite',
+        'DB_CONNECTION' => $isPgsql ? 'pgsql' : 'sqlite',
         'APP_MAINTENANCE_DRIVER' => 'file',
         'APP_MAINTENANCE_STORE' => 'array',
         'HTTPS' => 'on',
@@ -74,25 +80,27 @@ try {
         $_SERVER['REQUEST_URI'] = $uri;
     }
 
-    // 2. Database Copy / Restore to /tmp
-    $sqliteTmp = '/tmp/database.sqlite';
-    $sqliteSource = __DIR__ . '/../database/database.sqlite';
-    $sqliteDump = __DIR__ . '/../database/sqlite_dump.php';
+    // If using SQLite fallback, prepare writable /tmp/database.sqlite
+    if (!$isPgsql) {
+        $sqliteTmp = '/tmp/database.sqlite';
+        $sqliteSource = __DIR__ . '/../database/database.sqlite';
+        $sqliteDump = __DIR__ . '/../database/sqlite_dump.php';
 
-    if (!file_exists($sqliteTmp) || filesize($sqliteTmp) < 10000) {
-        if (file_exists($sqliteDump)) {
-            $raw = base64_decode(require $sqliteDump);
-            @file_put_contents($sqliteTmp, $raw);
-        } elseif (file_exists($sqliteSource)) {
-            @copy($sqliteSource, $sqliteTmp);
-        } else {
-            @touch($sqliteTmp);
+        if (!file_exists($sqliteTmp) || filesize($sqliteTmp) < 10000) {
+            if (file_exists($sqliteDump)) {
+                $raw = base64_decode(require $sqliteDump);
+                @file_put_contents($sqliteTmp, $raw);
+            } elseif (file_exists($sqliteSource)) {
+                @copy($sqliteSource, $sqliteTmp);
+            } else {
+                @touch($sqliteTmp);
+            }
         }
-    }
 
-    putenv('DB_DATABASE=' . $sqliteTmp);
-    $_ENV['DB_DATABASE'] = $sqliteTmp;
-    $_SERVER['DB_DATABASE'] = $sqliteTmp;
+        putenv('DB_DATABASE=' . $sqliteTmp);
+        $_ENV['DB_DATABASE'] = $sqliteTmp;
+        $_SERVER['DB_DATABASE'] = $sqliteTmp;
+    }
 
     // Forward request to Laravel public index
     require __DIR__ . '/../public/index.php';

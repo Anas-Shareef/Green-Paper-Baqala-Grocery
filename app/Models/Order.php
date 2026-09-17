@@ -79,4 +79,12 @@ class Order extends Model
     {
         return $this->hasMany(WhatsAppMessage::class);
     }
+
+    /**
+     * Legacy Financial Accessor ($order->total -> $order->total_amount)
+     */
+    public function getTotalAttribute(): float
+    {
+        return (float) ($this->attributes['total_amount'] ?? 0.00);
+    }
 }

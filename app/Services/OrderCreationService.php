@@ -220,7 +220,7 @@ class OrderCreationService
 
                 StockMovement::create([
                     'product_id' => $i['product']->id,
-                    'type' => 'sale',
+                    'type' => 'reservation',
                     'quantity' => -$i['quantity'],
                     'stock_before' => $prevQty,
                     'stock_after' => $newQty,
@@ -228,7 +228,7 @@ class OrderCreationService
                     'new_quantity' => $newQty,
                     'reference_type' => 'order',
                     'reference_id' => $order->id,
-                    'reason' => "Customer Sale Order #{$order->order_number}",
+                    'reason' => "Customer Order Stock Reservation #{$order->order_number}",
                 ]);
             }
 

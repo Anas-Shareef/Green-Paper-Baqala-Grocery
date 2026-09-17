@@ -242,4 +242,50 @@ class CustomerAddressController extends BaseApiController
 
         return $this->successResponse($address, 'Address set as default');
     }
+
+    /**
+     * Update Customer Profile & Phone Number without Creating Duplicate Customer (PRD Section 11 & 12)
+     */
+    public function updateProfile(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'customer_id' => 'required|exists:customers,id',
+            'name' => 'nullable|string|max:255',
+            'phone' => 'nullable|string',
+            'notes' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->errorResponse('Validation failed', $validator->errors(), 422);
+        }
+
+        $customer = Customer::find($request->input('customer_id'));
+        if (!$customer) {
+            return $this->errorResponse('Customer not found', [], 404);
+        }
+
+        $dataToUpdate = [];
+        if ($request->has('name') && !empty($request->input('name'))) {
+            $dataToUpdate['name'] = trim($request->input('name'));
+        }
+
+        if ($request->has('phone') && !empty($request->input('phone'))) {
+            $normalized = PhoneNumberService::normalize($request->input('phone'));
+            if (!empty($normalized)) {
+                $dataToUpdate['phone'] = $normalized;
+            }
+        }
+
+        if ($request->has('notes')) {
+            $dataToUpdate['notes'] = $request->input('notes');
+        }
+
+        if (!empty($dataToUpdate)) {
+            $customer->update($dataToUpdate);
+        }
+
+        return $this->successResponse([
+            'customer' => $customer->fresh(['addresses']),
+        ], 'Customer profile updated successfully');
+    }
 }

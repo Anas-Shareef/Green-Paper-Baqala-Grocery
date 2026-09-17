@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\v1\Admin\AdminProductController;
 use App\Http\Controllers\Api\v1\Admin\AdminReportController;
 use App\Http\Controllers\Api\v1\AuthController;
 use App\Http\Controllers\Api\v1\CustomerAddressController;
+use App\Http\Controllers\Api\v1\HealthController;
 use App\Http\Controllers\Api\v1\OrderController;
 use App\Http\Controllers\Api\v1\ProductController;
 use Illuminate\Support\Facades\Route;
@@ -21,6 +22,9 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::prefix('v1')->group(function () {
+    // Health & System Diagnostics
+    Route::get('/health/database', [HealthController::class, 'databaseCheck']);
+
     // Auth Routes
     Route::post('/auth/login', [AuthController::class, 'login']);
     Route::post('/auth/register', [AuthController::class, 'register']);
@@ -29,9 +33,10 @@ Route::prefix('v1')->group(function () {
     Route::post('/auth/send-otp', [AuthController::class, 'sendOtp']);
     Route::post('/auth/verify-otp', [AuthController::class, 'verifyOtp']);
 
-    // Customer Recognition & Address Book Routes
+    // Customer Recognition, Profile & Address Book Routes
     Route::post('/customer/recognize', [CustomerAddressController::class, 'recognize']);
     Route::post('/customer/identify', [CustomerAddressController::class, 'recognize']);
+    Route::put('/customer/profile', [CustomerAddressController::class, 'updateProfile']);
     Route::get('/customer/addresses', [CustomerAddressController::class, 'index']);
     Route::post('/customer/addresses', [CustomerAddressController::class, 'store']);
     Route::put('/customer/addresses/{id}', [CustomerAddressController::class, 'update']);
