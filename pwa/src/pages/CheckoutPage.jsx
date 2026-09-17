@@ -226,9 +226,6 @@ export const CheckoutPage = ({ cart, customer, onOrderSuccess, onBackToCart }) =
             <h2 className="text-3xl font-black text-emerald-800 font-mono mt-3">
               Order #{orderCreatedData.order?.customer_order_number || orderCreatedData.customer_order_number || '1'}
             </h2>
-            <p className="text-xs text-slate-500 font-mono pt-0.5">
-              Baqqala Order ID: {orderCreatedData.order_number || orderCreatedData.order?.order_number || 'ORD-000000'}
-            </p>
             <p className="text-xs text-slate-600 font-medium pt-1">
               Opening WhatsApp with your prefilled order message...
             </p>

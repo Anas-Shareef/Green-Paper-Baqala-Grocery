@@ -345,9 +345,204 @@
     </aside>
 
     <!-- Main Content Area (Light Slate Canvas) -->
-    <main class="flex-1 flex flex-col min-w-0 bg-slate-50 overflow-y-auto">
+    <main class="flex-1 flex flex-col min-w-0 bg-slate-50 overflow-y-auto" x-data="realtimeNotifications()" x-init="initNotifications()">
+        
+        <!-- Global Admin Header with Live Real-time Notification Bell & Popup -->
+        <header class="bg-white border-b border-slate-200/80 px-6 py-3 flex items-center justify-between sticky top-0 z-40 shadow-xs">
+            <div class="flex items-center gap-3">
+                <h2 class="text-sm font-extrabold text-slate-800 tracking-tight">
+                    {{ $title ?? 'Baqqala Admin Portal' }}
+                </h2>
+                <span class="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                    Live Engine
+                </span>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <!-- Sound Toggle Button -->
+                <button @click="soundEnabled = !soundEnabled; localStorage.setItem('admin_sound', soundEnabled)"
+                        class="p-2 text-slate-500 hover:text-slate-800 rounded-xl hover:bg-slate-100 transition-colors"
+                        :title="soundEnabled ? 'Mute Notification Chime' : 'Enable Notification Chime'">
+                    <template x-if="soundEnabled">
+                        <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
+                    </template>
+                    <template x-if="!soundEnabled">
+                        <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"></path></svg>
+                    </template>
+                </button>
+
+                <!-- Push Enable Button -->
+                <button @click="requestPush()" x-show="pushSupported && !pushSubscribed"
+                        class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition-colors">
+                    <svg class="w-3.5 h-3.5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 01-6 0v-1m6 0H9"></path></svg>
+                    Enable Notifications
+                </button>
+
+                <!-- Notification Bell Dropdown Button -->
+                <div class="relative">
+                    <button @click="dropdownOpen = !dropdownOpen"
+                            class="p-2.5 text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-100 relative transition-colors">
+                        <svg class="w-5 h-5 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 01-6 0v-1m6 0H9"></path></svg>
+                        <template x-if="unreadCount > 0">
+                            <span class="absolute top-1 right-1 bg-rose-600 text-white font-extrabold text-[10px] w-4 h-4 rounded-full flex items-center justify-center animate-pulse"
+                                  x-text="unreadCount > 9 ? '9+' : unreadCount"></span>
+                        </template>
+                    </button>
+
+                    <!-- Notification Dropdown Panel -->
+                    <div x-show="dropdownOpen" @click.away="dropdownOpen = false" x-cloak
+                         class="absolute right-0 mt-2 w-80 sm:w-96 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden text-xs">
+                        <div class="p-3.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between font-bold">
+                            <span class="flex items-center gap-1.5 text-slate-900">
+                                <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 01-6 0v-1m6 0H9"></path></svg>
+                                Notifications
+                                <template x-if="unreadCount > 0">
+                                    <span class="bg-rose-100 text-rose-800 text-[10px] px-2 py-0.5 rounded-full font-black" x-text="unreadCount + ' new'"></span>
+                                </template>
+                            </span>
+                            <template x-if="unreadCount > 0">
+                                <button @click="markAllRead()" class="text-[11px] text-emerald-700 hover:underline font-semibold">Mark all read</button>
+                            </template>
+                        </div>
+
+                        <div class="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                            <template x-if="notifications.length === 0">
+                                <div class="p-6 text-center text-slate-400 italic">No notifications yet</div>
+                            </template>
+                            <template x-for="n in notifications" :key="n.id">
+                                <div class="p-3.5 flex items-start justify-between gap-3" :class="n.is_read ? 'bg-white' : 'bg-emerald-50/50 font-medium'">
+                                    <div>
+                                        <div class="font-bold text-slate-900" x-text="n.title"></div>
+                                        <div class="text-slate-600 text-[11px] mt-0.5" x-text="n.message"></div>
+                                        <div class="text-[10px] text-slate-400 mt-1" x-text="n.created_at || 'Just now'"></div>
+                                    </div>
+                                    <a :href="'/admin/orders'" @click="markRead(n.id)" class="px-2.5 py-1 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 transition-colors shrink-0">View</a>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Live Desktop Toast Slide-in Notification -->
+            <div x-show="toast" x-transition:enter="transition ease-out duration-300 transform"
+                 x-transition:enter-start="translate-y-[-100%] opacity-0"
+                 x-transition:enter-end="translate-y-0 opacity-100"
+                 x-transition:leave="transition ease-in duration-200 transform"
+                 x-transition:leave-start="translate-y-0 opacity-100"
+                 x-transition:leave-end="translate-y-[-100%] opacity-0"
+                 x-cloak
+                 class="fixed top-4 right-4 z-50 max-w-sm bg-white border-2 border-emerald-500 rounded-2xl shadow-2xl p-4 space-y-3">
+                <div class="flex items-center justify-between font-bold text-emerald-900 border-b border-slate-100 pb-2">
+                    <span class="flex items-center gap-2 text-xs uppercase tracking-wider">
+                        🛒 NEW ORDER RECEIVED
+                    </span>
+                    <button @click="toast = null" class="text-slate-400 hover:text-slate-700 text-base">&times;</button>
+                </div>
+                <div class="text-xs space-y-1">
+                    <div class="font-black text-sm text-slate-900 font-mono" x-text="toast?.title || 'New Order'"></div>
+                    <div class="font-bold text-slate-800" x-text="toast?.message"></div>
+                </div>
+                <div class="pt-1 flex gap-2">
+                    <a :href="'/admin/orders'" @click="toast = null" class="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-center shadow-xs text-xs">View Order</a>
+                </div>
+            </div>
+        </header>
+
         {{ $slot }}
     </main>
+
+    <script>
+    function realtimeNotifications() {
+        return {
+            unreadCount: 0,
+            notifications: [],
+            toast: null,
+            dropdownOpen: false,
+            soundEnabled: localStorage.getItem('admin_sound') !== 'false',
+            pushSupported: 'Notification' in window && 'serviceWorker' in navigator,
+            pushSubscribed: 'Notification' in window && Notification.permission === 'granted',
+            lastNotificationId: 0,
+
+            initNotifications() {
+                this.fetchCheck();
+                setInterval(() => this.fetchCheck(), 3000);
+            },
+
+            async fetchCheck() {
+                try {
+                    const res = await fetch('/api/v1/admin/realtime-check');
+                    if (res.ok) {
+                        const json = await res.json();
+                        if (json.success && json.data) {
+                            const newCount = json.data.unread_count || 0;
+                            const latest = json.data.latest || [];
+                            
+                            if (latest.length > 0 && this.lastNotificationId !== 0 && latest[0].id > this.lastNotificationId) {
+                                const newNotif = latest[0];
+                                this.toast = newNotif;
+                                if (this.soundEnabled) {
+                                    this.playChime();
+                                }
+                                if (window.Livewire) {
+                                    Livewire.dispatch('orderReceived');
+                                }
+                            }
+
+                            if (latest.length > 0) {
+                                this.lastNotificationId = latest[0].id;
+                            }
+
+                            this.unreadCount = newCount;
+                            this.notifications = latest;
+                        }
+                    }
+                } catch (e) {}
+            },
+
+            playChime() {
+                try {
+                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
+                    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.4);
+                } catch (e) {}
+            },
+
+            async markRead(id) {
+                try {
+                    await fetch('/api/v1/admin/notifications/' + id + '/read', { method: 'POST' });
+                    this.fetchCheck();
+                } catch (e) {}
+            },
+
+            async markAllRead() {
+                try {
+                    await fetch('/api/v1/admin/notifications/mark-all-read', { method: 'POST' });
+                    this.fetchCheck();
+                } catch (e) {}
+            },
+
+            async requestPush() {
+                if ('Notification' in window) {
+                    const perm = await Notification.requestPermission();
+                    if (perm === 'granted') {
+                        this.pushSubscribed = true;
+                    }
+                }
+            }
+        }
+    }
+    </script>
 
     @livewireScripts
 </body>

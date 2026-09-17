@@ -56,27 +56,49 @@ class PhoneNumberService
      */
     public static function formatCanonicalAddress(?string $villa, ?string $street, ?string $zone = null): string
     {
-        $v = trim($villa ?? '');
-        $s = trim($street ?? '');
-        $z = trim($zone ?? '');
+        $vRaw = trim($villa ?? '');
+        $sRaw = trim($street ?? '');
+        $zRaw = trim($zone ?? '');
 
-        // Format Villa prefix cleanly
-        if (!empty($v)) {
-            $vFormatted = (str_ireplace('villa', '', $v) === $v) ? "Villa {$v}" : $v;
+        // Extract clean villa number or format Villa label
+        $vDigits = preg_replace('/[^\d]/', '', $vRaw);
+        if (!empty($vDigits)) {
+            $vLabel = "Villa {$vDigits}";
+        } elseif (!empty($vRaw)) {
+            $vLabel = (str_ireplace('villa', '', $vRaw) === $vRaw) ? "Villa {$vRaw}" : $vRaw;
         } else {
-            $vFormatted = '';
+            $vLabel = '';
         }
 
-        // Deduplicate zone if it already exists inside $s
-        $includeZone = !empty($z) && (stripos($s, $z) === false);
+        // Clean street address by stripping repeated "Villa XX" or "Villa" or "Zone XX"
+        $sClean = $sRaw;
+        if (!empty($vLabel)) {
+            // Strip "Villa 94", "Villa94", "Villa 94," etc.
+            $sClean = preg_replace('/(?:\bVilla\s*\d+\b|\bVilla\b|' . preg_quote($vRaw, '/') . ')[,\s]*/i', '', $sClean);
+        }
+        if (!empty($vDigits)) {
+            // Strip standalone villa number e.g. "94," if at start of street
+            $sClean = preg_replace('/^\s*' . preg_quote($vDigits, '/') . '[,\s]*/i', '', $sClean);
+        }
+        if (!empty($zRaw)) {
+            // Strip duplicate zone if already present in street
+            $sClean = preg_replace('/' . preg_quote($zRaw, '/') . '[,\s]*/i', '', $sClean);
+        }
 
-        $parts = array_values(array_filter([
-            $vFormatted,
-            $s,
-            $includeZone ? $z : null,
-        ]));
+        $sClean = trim($sClean, ", \t\n\r\0\x0B");
 
-        return implode(', ', $parts);
+        $parts = [];
+        if (!empty($vLabel)) {
+            $parts[] = $vLabel;
+        }
+        if (!empty($sClean)) {
+            $parts[] = $sClean;
+        }
+        if (!empty($zRaw)) {
+            $parts[] = $zRaw;
+        }
+
+        return implode(', ', array_filter($parts));
     }
 
     /**

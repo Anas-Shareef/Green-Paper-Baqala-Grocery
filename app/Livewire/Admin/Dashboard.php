@@ -11,6 +11,8 @@ use Livewire\Component;
 
 class Dashboard extends Component
 {
+    protected $listeners = ['orderReceived' => '$refresh'];
+
     public function acceptOrder(int $orderId, OrderService $orderService)
     {
         $order = Order::findOrFail($orderId);

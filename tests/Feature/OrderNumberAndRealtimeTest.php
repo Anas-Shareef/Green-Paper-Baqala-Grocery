@@ -58,7 +58,6 @@ class OrderNumberAndRealtimeTest extends TestCase
         $order1 = Order::find($res1->json('data.order.id'));
         $this->assertEquals(1, $order1->customer_order_number);
         $this->assertStringContainsString('Customer Order: #1', $res1->json('data.message_body'));
-        $this->assertStringContainsString('Baqqala Order ID: ORD-', $res1->json('data.message_body'));
 
         // Check canonical address: "Villa 94, Street 11, Zone B" - NO "Zone B, Zone B"
         $this->assertEquals('Villa 94, Street 11, Zone B', $order1->customer_address);

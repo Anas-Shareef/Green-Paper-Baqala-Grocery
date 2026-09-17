@@ -13,6 +13,8 @@ class Orders extends Component
 {
     use WithPagination;
 
+    protected $listeners = ['orderReceived' => '$refresh'];
+
     public string $statusTab = 'all'; // all, pending, accepted, preparing, out_for_delivery, delivered, cancelled
     public string $search = '';
 

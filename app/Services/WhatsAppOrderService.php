@@ -33,8 +33,7 @@ class WhatsAppOrderService
 
         $msg = "Hello Baqqala,\n\n";
         $msg .= "I would like to place an order.\n\n";
-        $msg .= "Customer Order: #{$customerOrderNum}\n";
-        $msg .= "Baqqala Order ID: {$order->order_number}\n\n";
+        $msg .= "Customer Order: #{$customerOrderNum}\n\n";
         $msg .= "Customer:\n{$customerName}\n{$customerPhone}\n\n";
         $msg .= "Delivery Address:\n{$canonicalAddress}\n";
         if (!empty($notes)) {
