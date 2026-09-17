@@ -81,7 +81,7 @@ class BaqqalaSystemTest extends TestCase
 
     public function test_customer_api_never_exposes_wholesale_cost()
     {
-        $response = $this->getJson('/api/home');
+        $response = $this->getJson('/api/v1/home');
         $response->assertStatus(200);
 
         $json = $response->json();

@@ -1,16 +1,19 @@
 import axios from 'axios';
 
-const BACKEND_DOMAIN = 'https://baqqala-admin.vercel.app/api';
+const getApiBaseUrl = () => {
+  if (import.meta.env.VITE_API_URL) {
+    const base = import.meta.env.VITE_API_URL.replace(/\/$/, '');
+    return base.endsWith('/v1') ? base : `${base}/v1`;
+  }
+  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    return 'http://localhost:8000/api/v1';
+  }
+  return 'https://baqqala-admin.vercel.app/api/v1';
+};
 
 const getApiUrl = (endpoint) => {
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  if (import.meta.env.VITE_API_BASE_URL) {
-    return `${import.meta.env.VITE_API_BASE_URL.replace(/\/$/, '')}${cleanEndpoint}`;
-  }
-  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-    return `http://localhost:8000/api${cleanEndpoint}`;
-  }
-  return `${BACKEND_DOMAIN}${cleanEndpoint}`;
+  return `${getApiBaseUrl()}${cleanEndpoint}`;
 };
 
 const client = axios.create({

@@ -14,8 +14,6 @@ $app = Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(at: '*');
-        $middleware->appendToGroup('api', \App\Http\Middleware\CorsMiddleware::class);
-        $middleware->appendToGroup('web', \App\Http\Middleware\CorsMiddleware::class);
         $middleware->validateCsrfTokens(except: [
             'livewire*',
             'livewire/*',

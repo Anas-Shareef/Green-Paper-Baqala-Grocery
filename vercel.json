@@ -1,22 +1,6 @@
 {
   "version": 2,
   "outputDirectory": "public",
-  "headers": [
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET,OPTIONS,PATCH,DELETE,POST,PUT" },
-        { "key": "Access-Control-Allow-Headers", "value": "*" }
-      ]
-    },
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" }
-      ]
-    }
-  ],
   "builds": [
     {
       "src": "api/index.php",
@@ -30,13 +14,10 @@
   "env": {
     "PHP_VERSION": "8.3",
     "APP_ENV": "production",
-    "APP_DEBUG": "true",
-    "APP_KEY": "base64:yH6b2N0U9aL/JgK/sX1u2v3w4x5y6z7A8B9C0D1E2F3=",
+    "APP_DEBUG": "false",
     "VIEW_COMPILED_PATH": "/tmp/storage/framework/views",
     "CACHE_STORE": "array",
     "LOG_CHANNEL": "stderr",
-    "SESSION_DRIVER": "cookie",
-    "DB_CONNECTION": "sqlite",
-    "DB_DATABASE": "/tmp/database.sqlite"
+    "SESSION_DRIVER": "cookie"
   }
 }

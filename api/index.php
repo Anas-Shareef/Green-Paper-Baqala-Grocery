@@ -1,15 +1,5 @@
 <?php
 
-// 0. Handle CORS Headers and OPTIONS preflight requests globally for Vercel
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, PATCH, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Accept, X-CSRF-TOKEN, Origin");
-
-if (isset($_SERVER['REQUEST_METHOD']) && strtoupper($_SERVER['REQUEST_METHOD']) === 'OPTIONS') {
-    http_response_code(200);
-    exit(0);
-}
-
 try {
     // 1. Prepare writable paths for Vercel serverless environment (/tmp)
     $tmpStorage = '/tmp/storage';

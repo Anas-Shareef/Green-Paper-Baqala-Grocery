@@ -27,3 +27,6 @@ Homestead.yaml
 Thumbs.db
 /pwa/node_modules
 /pwa/dist
+/admin/node_modules
+/admin/dist
+

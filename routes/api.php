@@ -14,25 +14,10 @@ use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| Baqqala REST API Routes (/api/v1)
+| Baqqala Canonical REST API Routes (/api/v1)
 |--------------------------------------------------------------------------
 */
 
-// Legacy & Direct API Shortcuts
-Route::get('/home', [ProductController::class, 'home']);
-Route::get('/products', [ProductController::class, 'index']);
-Route::get('/products/search', [ProductController::class, 'search']);
-Route::get('/products/{id}', [ProductController::class, 'show']);
-Route::get('/categories', [ProductController::class, 'categories']);
-
-Route::post('/auth/send-otp', [AuthController::class, 'sendOtp']);
-Route::post('/auth/verify-otp', [AuthController::class, 'verifyOtp']);
-
-Route::post('/orders', [OrderController::class, 'store']);
-Route::get('/orders/history', [OrderController::class, 'customerHistory']);
-Route::get('/orders/{orderNumber}', [OrderController::class, 'show']);
-
-// Versioned /api/v1 API Routes
 Route::prefix('v1')->group(function () {
     // Auth Routes
     Route::post('/auth/login', [AuthController::class, 'login']);
