@@ -126,6 +126,12 @@ class OrderCreationService
             $deliveryFee = $subtotal >= $movThreshold ? 0.00 : 0.00; // Free villa delivery
             $grandTotal = $subtotal + $deliveryFee;
 
+            // Enforce Cash on Delivery (PRD Section 13)
+            $requestedPm = strtolower(trim($data['payment_method'] ?? 'cod'));
+            if (!in_array($requestedPm, ['cod', 'cash', 'cash_on_delivery'])) {
+                throw new \InvalidArgumentException('Only Cash on Delivery (COD) is supported.');
+            }
+
             // 6. Create Order Record with Address Snapshot
             $order = Order::create([
                 'order_number' => $orderNumber,
@@ -138,7 +144,7 @@ class OrderCreationService
                 'subtotal' => $subtotal,
                 'delivery_charge' => $deliveryFee,
                 'total_amount' => $grandTotal,
-                'payment_method' => strtolower($data['payment_method'] ?? 'cash'),
+                'payment_method' => 'cod',
                 'payment_status' => 'pending',
                 'status' => 'pending',
                 'whatsapp_status' => 'prepared',

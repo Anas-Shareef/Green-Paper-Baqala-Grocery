@@ -12,19 +12,23 @@ use Illuminate\Support\Facades\Validator;
 class CustomerAddressController extends BaseApiController
 {
     /**
-     * Identify Customer by Phone Number & Return Saved Delivery Addresses
+     * Recognize Customer by Mobile Phone Number & Return Saved Delivery Details
      */
-    public function identify(Request $request): JsonResponse
+    public function recognize(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'phone' => 'required|string',
         ]);
 
         if ($validator->fails()) {
-            return $this->errorResponse('Phone number is required', $validator->errors(), 422);
+            return $this->errorResponse('Valid phone number is required', $validator->errors(), 422);
         }
 
         $phone = PhoneNumberService::normalize($request->input('phone'));
+        if (empty($phone)) {
+            return $this->errorResponse('Please enter a valid UAE mobile number.', [], 422);
+        }
+
         $customer = Customer::where('phone', $phone)->with(['addresses' => function ($q) {
             $q->orderBy('is_default', 'desc')->orderBy('id', 'desc');
         }])->first();
@@ -35,7 +39,7 @@ class CustomerAddressController extends BaseApiController
                 'phone' => $phone,
                 'customer' => null,
                 'addresses' => [],
-            ], 'New customer phone number');
+            ], 'Mobile number is available for a new guest order.');
         }
 
         return $this->successResponse([
@@ -47,7 +51,15 @@ class CustomerAddressController extends BaseApiController
                 'phone' => $customer->phone,
             ],
             'addresses' => $customer->addresses,
-        ], 'Customer recognized');
+        ], 'Customer Recognized');
+    }
+
+    /**
+     * Alias for recognize method
+     */
+    public function identify(Request $request): JsonResponse
+    {
+        return $this->recognize($request);
     }
 
     /**

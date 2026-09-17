@@ -55,8 +55,13 @@ export const api = {
   },
 
   // Customer Recognition & Address Book API
+  recognizeCustomer: async (phone) => {
+    const res = await client.post(getApiUrl('/customer/recognize'), { phone });
+    return res.data?.data || res.data;
+  },
+
   identifyCustomer: async (phone) => {
-    const res = await client.post(getApiUrl('/customer/identify'), { phone });
+    const res = await client.post(getApiUrl('/customer/recognize'), { phone });
     return res.data?.data || res.data;
   },
 

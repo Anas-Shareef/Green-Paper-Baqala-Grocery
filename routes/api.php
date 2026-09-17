@@ -30,7 +30,8 @@ Route::prefix('v1')->group(function () {
     Route::post('/auth/verify-otp', [AuthController::class, 'verifyOtp']);
 
     // Customer Recognition & Address Book Routes
-    Route::post('/customer/identify', [CustomerAddressController::class, 'identify']);
+    Route::post('/customer/recognize', [CustomerAddressController::class, 'recognize']);
+    Route::post('/customer/identify', [CustomerAddressController::class, 'recognize']);
     Route::get('/customer/addresses', [CustomerAddressController::class, 'index']);
     Route::post('/customer/addresses', [CustomerAddressController::class, 'store']);
     Route::put('/customer/addresses/{id}', [CustomerAddressController::class, 'update']);

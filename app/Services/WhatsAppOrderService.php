@@ -8,45 +8,43 @@ use App\Models\WhatsAppMessage;
 class WhatsAppOrderService
 {
     /**
-     * Build server-authoritative formatted WhatsApp message text
+     * Build server-authoritative formatted WhatsApp message text (PRD Section 21)
      */
     public function buildOrderMessage(Order $order): string
     {
         $itemsText = "";
         foreach ($order->items as $item) {
-            $unitPriceFormatted = number_format((float) $item->unit_price, 2);
             $lineTotalFormatted = number_format((float) $item->total, 2);
-            $itemsText .= "• {$item->product_name} × {$item->quantity} — ₹{$lineTotalFormatted}\n";
+            $itemsText .= "• {$item->product_name} × {$item->quantity}\n";
         }
 
         $subtotalFormatted = number_format((float) $order->subtotal, 2);
         $deliveryFormatted = (float) $order->delivery_charge > 0 
-            ? "₹" . number_format((float) $order->delivery_charge, 2) 
+            ? "AED " . number_format((float) $order->delivery_charge, 2) 
             : "FREE";
         $totalFormatted = number_format((float) $order->total_amount, 2);
 
-        $customerName = $order->customer_name_snapshot ?: ($order->customer->name ?? 'Valued Customer');
+        $customerName = $order->customer_name_snapshot ?: ($order->customer->name ?? 'Guest Customer');
         $customerPhone = $order->customer_phone_snapshot ?: ($order->customer->phone ?? '');
-        $villa = $order->customer_villa ?: 'Villa N/A';
+        $villa = $order->customer_villa ? "Villa {$order->customer_villa}" : "Villa N/A";
         $address = $order->customer_address ?: 'Standard Villa Delivery';
         $notes = $order->customer_notes_snapshot ?: $order->notes ?: '';
 
-        $msg = "🛒 *BAQQALA GROCERY ORDER*\n\n";
-        $msg .= "Order Number: *{$order->order_number}*\n\n";
-        $msg .= "👤 *Customer:* {$customerName}\n";
-        $msg .= "📱 *Phone:* {$customerPhone}\n\n";
-        $msg .= "📍 *Delivery Location:*\n{$villa}\n{$address}\n\n";
-        $msg .= "🧺 *Order Items:*\n{$itemsText}\n";
-        $msg .= "Subtotal: ₹{$subtotalFormatted}\n";
-        $msg .= "Delivery: {$deliveryFormatted}\n";
-        $msg .= "💰 *Total Amount:* ₹{$totalFormatted}\n";
-        $msg .= "💵 *Payment Method:* " . strtoupper($order->payment_method) . " (COD)\n";
-
+        $msg = "Hello Baqqala,\n\n";
+        $msg .= "I would like to place an order.\n\n";
+        $msg .= "Order: *{$order->order_number}*\n\n";
+        $msg .= "Customer:\n{$customerName}\n{$customerPhone}\n\n";
+        $msg .= "Delivery Address:\n{$villa}\n{$address}\n";
         if (!empty($notes)) {
-            $msg .= "\n📝 *Delivery Notes:* {$notes}\n";
+            $msg .= "Notes: {$notes}\n";
         }
-
-        $msg .= "\nThank you for shopping with Baqqala Grocery!";
+        $msg .= "\nItems:\n{$itemsText}\n";
+        $msg .= "Subtotal: AED {$subtotalFormatted}\n";
+        $msg .= "Delivery: {$deliveryFormatted}\n";
+        $msg .= "Total: AED {$totalFormatted}\n\n";
+        $msg .= "Payment Method:\nCash on Delivery\n\n";
+        $msg .= "Please confirm my order.\n\n";
+        $msg .= "Thank you.";
 
         return $msg;
     }
@@ -54,9 +52,10 @@ class WhatsAppOrderService
     /**
      * Generate WhatsApp Click-To-Chat URL & Record WhatsAppMessage Entry
      */
-    public function generateClickToChat(Order $order, string $adminPhone = '971501112233'): array
+    public function generateClickToChat(Order $order, ?string $adminPhone = null): array
     {
-        $recipient = PhoneNumberService::formatForWhatsApp($adminPhone);
+        $targetPhone = $adminPhone ?: config('app.whatsapp_admin_number', env('WHATSAPP_ADMIN_NUMBER', '971501112233'));
+        $recipient = PhoneNumberService::formatForWhatsApp($targetPhone);
         $messageBody = $this->buildOrderMessage($order);
         $encodedMessage = rawurlencode($messageBody);
         $whatsappUrl = "https://wa.me/{$recipient}?text={$encodedMessage}";

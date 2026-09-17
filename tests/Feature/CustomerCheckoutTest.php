@@ -48,16 +48,16 @@ class CustomerCheckoutTest extends TestCase
         $this->assertEquals('971501234567', PhoneNumberService::formatForWhatsApp('0501234567'));
     }
 
-    public function test_customer_identification_endpoint()
+    public function test_customer_recognition_endpoint()
     {
-        // 1. Unrecognized phone
-        $res1 = $this->postJson('/api/v1/customer/identify', [
+        // 1. Unrecognized phone via /api/v1/customer/recognize
+        $res1 = $this->postJson('/api/v1/customer/recognize', [
             'phone' => '0509998877'
         ]);
         $res1->assertStatus(200);
         $res1->assertJsonPath('data.customer_exists', false);
 
-        // 2. Create customer and recognize
+        // 2. Create customer and recognize via /api/v1/customer/recognize
         $customer = Customer::create([
             'name' => 'Salem Al Mansoori',
             'phone' => '+971509998877',
@@ -71,13 +71,31 @@ class CustomerCheckoutTest extends TestCase
             'is_default' => true,
         ]);
 
-        $res2 = $this->postJson('/api/v1/customer/identify', [
+        $res2 = $this->postJson('/api/v1/customer/recognize', [
             'phone' => '0509998877'
         ]);
         $res2->assertStatus(200);
         $res2->assertJsonPath('data.customer_exists', true);
         $res2->assertJsonPath('data.customer.name', 'Salem Al Mansoori');
         $res2->assertJsonCount(1, 'data.addresses');
+    }
+
+    public function test_reject_unsupported_payment_method()
+    {
+        $payload = [
+            'name' => 'Invalid Payment User',
+            'phone' => '0504445566',
+            'villa_number' => 'Villa 10',
+            'delivery_address' => 'Street 5',
+            'payment_method' => 'stripe',
+            'items' => [
+                ['product_id' => 1, 'quantity' => 1]
+            ]
+        ];
+
+        $response = $this->postJson('/api/v1/orders', $payload);
+        $response->assertStatus(400);
+        $this->assertStringContainsString('Only Cash on Delivery', $response->json('message'));
     }
 
     public function test_order_creation_transaction_and_whatsapp_url()
