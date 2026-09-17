@@ -28,7 +28,9 @@ class WhatsAppOrderService
         $customerName = $order->customer_name_snapshot ?: ($order->customer->name ?? 'Guest Customer');
         $customerPhone = PhoneNumberService::formatForWhatsApp($order->customer_phone_snapshot ?: ($order->customer->phone ?? ''));
         
-        $canonicalAddress = PhoneNumberService::formatCanonicalAddress($order->customer_villa, $order->customer_address);
+        $canonicalAddress = !empty($order->customer_address) 
+            ? $order->customer_address 
+            : PhoneNumberService::formatCanonicalAddress($order->customer_villa, $order->customer_address);
         $notes = $order->customer_notes_snapshot ?: $order->notes ?: '';
 
         $msg = "Hello Baqqala,\n\n";

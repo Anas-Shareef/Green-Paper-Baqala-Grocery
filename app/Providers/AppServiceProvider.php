@@ -33,5 +33,10 @@ class AppServiceProvider extends ServiceProvider
             return new \App\Services\VercelHasher();
         });
         config(['hashing.driver' => 'vercel']);
+
+        // Register custom PostgreSQL connection resolver for Supabase pooler compatibility
+        \Illuminate\Database\Connection::resolverFor('pgsql', function ($connection, $database, $prefix, $config) {
+            return new \App\Database\PostgresConnection($connection, $database, $prefix, $config);
+        });
     }
 }

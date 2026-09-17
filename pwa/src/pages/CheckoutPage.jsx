@@ -33,6 +33,8 @@ export const CheckoutPage = ({ cart, customer, onOrderSuccess, onBackToCart }) =
         setNewStreetAddress(addr.street_address || '');
         setNewZone(addr.zone || '');
         setNewLandmark(addr.landmark || '');
+      } else {
+        setIsEditingAddress(true);
       }
     }
   }, [recognizedCustomer, selectedAddressId, savedAddresses]);
@@ -111,33 +113,61 @@ export const CheckoutPage = ({ cart, customer, onOrderSuccess, onBackToCart }) =
   // Submit Order via POST /api/v1/orders
   const handleSubmitOrder = async (e) => {
     e.preventDefault();
+
     if (cart.length === 0) {
       setError('Your cart is empty. Please add items before checking out.');
       return;
     }
 
-    // Validation for New Customer Form
-    if (recognitionStatus === 'not_recognized') {
-      if (!newCustomerName.trim()) {
-        setError('Customer Name is required.');
-        return;
-      }
-      if (!newVillaNumber.trim()) {
-        setError('Villa Number is required.');
-        return;
-      }
-      if (!newStreetAddress.trim()) {
-        setError('Street / Area is required.');
-        return;
-      }
-      if (!newZone.trim()) {
-        setError('Zone is required.');
-        return;
-      }
-    } else if (recognitionStatus === 'recognized' && savedAddresses.length > 0 && !selectedAddressId) {
-      setError('Please select a delivery address.');
+    const cleanPhoneDigits = phoneInput.replace(/[^\d]/g, '');
+    if (!cleanPhoneDigits || cleanPhoneDigits.length < 8) {
+      setError('Please enter a valid UAE mobile phone number (e.g. 0501234567).');
       return;
     }
+
+    // Resolve delivery address fields
+    let targetVilla = '';
+    let targetStreet = '';
+    let targetZone = '';
+    let targetLandmark = newLandmark.trim();
+    let targetNotes = newDeliveryNotes.trim();
+    let targetAddressId = null;
+
+    if (recognitionStatus === 'recognized' && !isEditingAddress && savedAddresses.length > 0) {
+      const selectedAddr = savedAddresses.find(a => a.id === selectedAddressId) || savedAddresses[0];
+      if (selectedAddr) {
+        if (typeof selectedAddr.id === 'number' || /^\d+$/.test(String(selectedAddr.id))) {
+          targetAddressId = parseInt(selectedAddr.id, 10);
+        }
+        targetVilla = selectedAddr.villa_number || '';
+        targetStreet = selectedAddr.street_address || '';
+        targetZone = selectedAddr.zone || '';
+        targetLandmark = selectedAddr.landmark || '';
+        targetNotes = selectedAddr.delivery_notes || '';
+      }
+    } else {
+      targetVilla = newVillaNumber.trim();
+      targetStreet = newStreetAddress.trim();
+      targetZone = newZone.trim();
+    }
+
+    // Validate required address fields
+    if (!targetVilla) {
+      setError('Please provide your Villa Number (e.g. Villa 94).');
+      return;
+    }
+    if (!targetStreet) {
+      setError('Please provide your Street / Area (e.g. Street 11).');
+      return;
+    }
+    if (!targetZone) {
+      setError('Please provide your Zone (e.g. Zone B).');
+      return;
+    }
+
+    const targetName = (recognitionStatus === 'recognized' && recognizedCustomer?.name)
+      ? recognizedCustomer.name
+      : (newCustomerName.trim() || 'Valued Customer');
 
     setLoading(true);
     setError(null);
@@ -147,8 +177,17 @@ export const CheckoutPage = ({ cart, customer, onOrderSuccess, onBackToCart }) =
       ? `chk-${crypto.randomUUID()}` 
       : `chk-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
-    // Prepare Request Payload
-    let payload = {
+    // Prepare Canonical Request Payload
+    const normPhone = normalizedPhone || normalizePhoneNumber(phoneInput);
+    const payload = {
+      customer_name: targetName,
+      customer_phone: normPhone,
+      villa_number: targetVilla,
+      street_address: targetStreet,
+      delivery_address: targetStreet, // Alias for backward compatibility
+      zone: targetZone,
+      landmark: targetLandmark || undefined,
+      notes: targetNotes || undefined,
       payment_method: 'cod', // Enforce COD strictly
       idempotency_key: idempotencyKey,
       items: cart.map(i => ({
@@ -157,50 +196,34 @@ export const CheckoutPage = ({ cart, customer, onOrderSuccess, onBackToCart }) =
       }))
     };
 
-    if (recognitionStatus === 'recognized') {
-      payload.customer_phone = recognizedCustomer?.phone || normalizedPhone;
-      payload.customer_name = recognizedCustomer?.name || 'Recognized Customer';
-      
-      if (selectedAddressId && (typeof selectedAddressId === 'number' || /^\d+$/.test(String(selectedAddressId)))) {
-        payload.address_id = parseInt(selectedAddressId, 10);
-      }
-      
-      const selectedAddr = savedAddresses.find(a => a.id === selectedAddressId) || savedAddresses[0];
-      if (selectedAddr) {
-        payload.villa_number = selectedAddr.villa_number || 'Villa';
-        payload.delivery_address = selectedAddr.street_address || 'Villa Delivery';
-        payload.zone = selectedAddr.zone || '';
-      }
-    } else {
-      payload.customer_phone = normalizedPhone || normalizePhoneNumber(phoneInput);
-      payload.customer_name = newCustomerName.trim();
-      payload.villa_number = newVillaNumber.trim();
-      payload.delivery_address = newStreetAddress.trim();
-      payload.zone = newZone.trim();
-      payload.landmark = newLandmark.trim();
-      payload.notes = newDeliveryNotes.trim();
+    if (targetAddressId) {
+      payload.address_id = targetAddressId;
     }
 
     try {
       const res = await api.submitOrder(payload);
 
-      if (res && (res.order || res.order_number)) {
-        const orderData = res.order || res;
-        const waUrl = res.whatsapp_url || orderData.whatsapp_url;
-        const msgBody = res.message_body || orderData.message_body;
+      // Support canonical { success: true, data: { order, whatsapp } } or flat response
+      const orderData = res?.data?.order || res?.order || res;
+      const orderNumber = res?.data?.order?.order_number || res?.order_number || orderData?.order_number;
+      const customerOrderNumber = res?.data?.order?.customer_order_number || res?.customer_order_number || orderData?.customer_order_number;
+      const waUrl = res?.data?.whatsapp?.url || res?.whatsapp?.url || res?.whatsapp_url || orderData?.whatsapp_url;
+      const msgBody = res?.data?.whatsapp?.message || res?.whatsapp?.message || res?.message_body || orderData?.message_body;
 
+      if (orderData && (orderNumber || orderData.id)) {
         setOrderCreatedData({
           order: orderData,
-          order_number: res.order_number || orderData.order_number,
+          order_number: orderNumber,
+          customer_order_number: customerOrderNumber,
           whatsapp_url: waUrl,
           message_body: msgBody,
         });
 
-        // Trigger automatic WhatsApp open after brief feedback delay
+        // Trigger WhatsApp strictly on successful order creation
         if (waUrl) {
           setTimeout(() => {
             window.open(waUrl, '_blank', 'noopener,noreferrer');
-          }, 500);
+          }, 400);
         }
 
         if (onOrderSuccess) {
@@ -210,9 +233,29 @@ export const CheckoutPage = ({ cart, customer, onOrderSuccess, onBackToCart }) =
         throw new Error('Invalid response received from server.');
       }
     } catch (err) {
-      console.error('Order submission error:', err);
-      const serverMsg = err.response?.data?.message || err.message;
-      setError(serverMsg || 'We couldn\'t place your order. Please review your cart and try again.');
+      // Detailed error logging for development per Section 2
+      console.error('Order API Error', {
+        status: err.response?.status,
+        data: err.response?.data,
+        message: err.response?.data?.message,
+        errors: err.response?.data?.errors,
+      });
+
+      // User-friendly error messages per Section 18
+      if (err.response?.status === 422) {
+        const validationErrors = err.response?.data?.errors;
+        if (validationErrors?.items) {
+          setError('Some items in your cart are no longer available in the requested quantity. Please review your cart.');
+        } else if (validationErrors?.customer_phone) {
+          setError('Please enter a valid UAE mobile phone number.');
+        } else {
+          setError(err.response?.data?.message || 'Please check your delivery details and try again.');
+        }
+      } else if (err.response?.status >= 500) {
+        setError("We couldn't place your order right now. Please try again in a few moments.");
+      } else {
+        setError(err.response?.data?.message || "We couldn't place your order. Please review your cart and delivery details.");
+      }
     } finally {
       setLoading(false);
     }
@@ -339,6 +382,11 @@ export const CheckoutPage = ({ cart, customer, onOrderSuccess, onBackToCart }) =
                 setPhoneInput(e.target.value);
                 if (recognitionStatus !== 'idle') setRecognitionStatus('idle');
               }}
+              onBlur={() => {
+                if (phoneInput && phoneInput.trim().replace(/[^\d]/g, '').length >= 8 && recognitionStatus === 'idle') {
+                  handleRecognize(phoneInput);
+                }
+              }}
               placeholder="+971 50 XXX XXXX"
               required
               disabled={loading || recognitionStatus === 'recognizing'}
@@ -384,7 +432,7 @@ export const CheckoutPage = ({ cart, customer, onOrderSuccess, onBackToCart }) =
         </div>
 
         {/* STEP 2: DELIVERY ADDRESS */}
-        {(recognitionStatus === 'recognized' || recognitionStatus === 'not_recognized') && (
+        {(recognitionStatus === 'recognized' || recognitionStatus === 'not_recognized' || recognitionStatus === 'idle' || (phoneInput && phoneInput.trim().length >= 8)) && (
           <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
             <h2 className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
               <MapPin className="w-4 h-4 text-emerald-600" />
@@ -497,8 +545,8 @@ export const CheckoutPage = ({ cart, customer, onOrderSuccess, onBackToCart }) =
               </div>
             )}
 
-            {/* SCENARIO B: NEW CUSTOMER FORM */}
-            {recognitionStatus === 'not_recognized' && (
+            {/* SCENARIO B: NEW CUSTOMER / GUEST FORM */}
+            {(recognitionStatus === 'not_recognized' || recognitionStatus === 'idle') && (
               <div className="space-y-3 pt-1">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Customer Name *</label>
@@ -635,7 +683,7 @@ export const CheckoutPage = ({ cart, customer, onOrderSuccess, onBackToCart }) =
         {/* PRIMARY ACTION BUTTON */}
         <button
           type="submit"
-          disabled={loading || recognitionStatus === 'idle' || recognitionStatus === 'recognizing'}
+          disabled={loading || recognitionStatus === 'recognizing'}
           className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2"
         >
           <MessageCircle className="w-5 h-5" />

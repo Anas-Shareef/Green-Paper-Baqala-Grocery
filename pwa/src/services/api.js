@@ -102,7 +102,11 @@ export const api = {
   },
 
   submitOrder: async (payload) => {
-    const res = await client.post(getApiUrl('/orders'), payload);
+    const headers = {};
+    if (payload?.idempotency_key) {
+      headers['Idempotency-Key'] = payload.idempotency_key;
+    }
+    const res = await client.post(getApiUrl('/orders'), payload, { headers });
     return res.data?.data || res.data;
   },
 

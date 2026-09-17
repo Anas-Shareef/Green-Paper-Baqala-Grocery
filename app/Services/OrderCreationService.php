@@ -34,6 +34,10 @@ class OrderCreationService
                     'order' => $existing,
                     'whatsapp_url' => $wa['whatsapp_url'],
                     'message_body' => $wa['message_body'],
+                    'whatsapp' => [
+                        'url' => $wa['whatsapp_url'],
+                        'message' => $wa['message_body'],
+                    ],
                     'is_duplicate' => true,
                 ];
             }
@@ -64,7 +68,12 @@ class OrderCreationService
                 $customer->update(['name' => $name]);
             }
 
-            // 4. Address Processing
+            // 4. Address Processing (Reuse or Create without duplication)
+            $villa = trim($data['villa_number'] ?? $data['address']['villa_number'] ?? $customer->villa_number ?? '');
+            $street = trim($data['street_address'] ?? $data['delivery_address'] ?? $data['address']['street_address'] ?? $customer->address ?? '');
+            $zone = trim($data['zone'] ?? $data['address']['zone'] ?? $customer->zone ?? '');
+            $notes = trim($data['notes'] ?? $data['address']['delivery_notes'] ?? '');
+
             $address = null;
             $rawAddressId = $data['address_id'] ?? null;
 
@@ -77,42 +86,75 @@ class OrderCreationService
             }
 
             if (!$address) {
-                $villa = trim($data['villa_number'] ?? $data['address']['villa_number'] ?? $customer->villa_number ?? 'Villa');
-                $street = trim($data['delivery_address'] ?? $data['address']['street_address'] ?? $customer->address ?? ($customer->zone ? "Zone {$customer->zone}" : 'Villa Delivery'));
-                $zone = trim($data['zone'] ?? $data['address']['zone'] ?? $customer->zone ?? '');
-                $notes = trim($data['notes'] ?? $data['address']['delivery_notes'] ?? '');
-
                 try {
                     if (\Illuminate\Support\Facades\Schema::hasTable('customer_addresses')) {
-                        $isFirstAddress = CustomerAddress::where('customer_id', $customer->id)->count() === 0;
+                        // Find matching existing address by villa or default
+                        $existingQuery = CustomerAddress::where('customer_id', $customer->id);
+                        if (!empty($villa)) {
+                            $cleanVillaDigits = preg_replace('/[^\d]/', '', $villa);
+                            $existingQuery->where(function ($q) use ($villa, $cleanVillaDigits) {
+                                $q->where('villa_number', $villa);
+                                if (!empty($cleanVillaDigits)) {
+                                    $q->orWhere('villa_number', $cleanVillaDigits)
+                                      ->orWhere('villa_number', "Villa {$cleanVillaDigits}");
+                                }
+                            });
+                        }
+                        $address = $existingQuery->first() 
+                            ?? CustomerAddress::where('customer_id', $customer->id)->where('is_default', true)->first()
+                            ?? CustomerAddress::where('customer_id', $customer->id)->first();
 
-                        $address = CustomerAddress::create([
-                            'customer_id' => $customer->id,
-                            'label' => $data['address_label'] ?? 'Home',
-                            'villa_number' => $villa,
-                            'street_address' => $street,
-                            'zone' => $zone,
-                            'delivery_notes' => $notes,
-                            'is_default' => $isFirstAddress || !empty($data['is_default']),
-                        ]);
-
-                        if ($isFirstAddress || !empty($data['is_default'])) {
-                            CustomerAddress::where('customer_id', $customer->id)->where('id', '!=', $address->id)->update(['is_default' => false]);
+                        if ($address) {
+                            // Update existing address record
+                            $address->update([
+                                'villa_number' => $villa ?: $address->villa_number,
+                                'street_address' => $street ?: $address->street_address,
+                                'zone' => $zone ?: $address->zone,
+                                'delivery_notes' => $notes ?: $address->delivery_notes,
+                            ]);
+                        } else {
+                            // Create first address for customer
+                            $address = CustomerAddress::create([
+                                'customer_id' => $customer->id,
+                                'label' => $data['address_label'] ?? 'Home',
+                                'villa_number' => $villa ?: 'Villa',
+                                'street_address' => $street ?: 'Villa Delivery',
+                                'zone' => $zone,
+                                'delivery_notes' => $notes,
+                                'is_default' => true,
+                            ]);
                         }
                     }
                 } catch (\Throwable $e) {
-                    \Illuminate\Support\Facades\Log::warning('Address creation in order tx warning: ' . $e->getMessage());
+                    \Illuminate\Support\Facades\Log::warning('Address processing in order tx warning: ' . $e->getMessage());
                 }
 
                 if (!$address) {
                     $address = (object) [
-                        'villa_number' => $villa,
-                        'street_address' => $street,
+                        'villa_number' => $villa ?: 'Villa',
+                        'street_address' => $street ?: 'Villa Delivery',
                         'zone' => $zone,
                         'delivery_notes' => $notes,
                     ];
                 }
             }
+
+            // Keep Customer profile fields synchronized
+            try {
+                $customerUpdates = [];
+                if (!empty($villa) && $customer->villa_number !== $villa) {
+                    $customerUpdates['villa_number'] = $villa;
+                }
+                if (!empty($street) && $customer->address !== $street) {
+                    $customerUpdates['address'] = $street;
+                }
+                if (!empty($zone) && $customer->zone !== $zone) {
+                    $customerUpdates['zone'] = $zone;
+                }
+                if (!empty($customerUpdates)) {
+                    $customer->update($customerUpdates);
+                }
+            } catch (\Throwable $e) {}
 
             // 5. Customer Sequential Order Number (PRD Priority 1)
             $customerOrderCount = Order::where('customer_id', $customer->id)->count();
@@ -183,7 +225,7 @@ class OrderCreationService
                 'total_amount' => $grandTotal,
                 'payment_method' => 'cod',
                 'payment_status' => 'pending',
-                'status' => 'pending',
+                'status' => 'awaiting_whatsapp',
                 'whatsapp_status' => 'prepared',
                 'idempotency_key' => $data['idempotency_key'] ?? (string) Str::uuid(),
                 'order_source' => $data['order_source'] ?? 'PWA',
@@ -243,6 +285,10 @@ class OrderCreationService
                 'order' => $order->load(['items.product', 'customer']),
                 'whatsapp_url' => $wa['whatsapp_url'],
                 'message_body' => $wa['message_body'],
+                'whatsapp' => [
+                    'url' => $wa['whatsapp_url'],
+                    'message' => $wa['message_body'],
+                ],
                 'is_duplicate' => false,
             ];
         });

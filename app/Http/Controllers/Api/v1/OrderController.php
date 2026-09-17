@@ -28,49 +28,99 @@ class OrderController extends BaseApiController
      */
     public function store(Request $request): JsonResponse
     {
+        // Support header or body Idempotency-Key
+        $idempotencyKey = $request->header('Idempotency-Key') ?: $request->input('idempotency_key');
+
         $validator = Validator::make($request->all(), [
-            'name' => 'nullable|string|max:255',
-            'phone' => 'nullable|string|max:20',
             'customer_name' => 'nullable|string|max:255',
-            'customer_phone' => 'nullable|string|max:20',
-            'villa_number' => 'nullable|string',
+            'name' => 'nullable|string|max:255',
+            'customer_phone' => 'nullable|string|max:25',
+            'phone' => 'nullable|string|max:25',
+            'villa_number' => 'nullable|string|max:50',
+            'street_address' => 'nullable|string|max:255',
+            'delivery_address' => 'nullable|string|max:255',
             'address' => 'nullable',
-            'delivery_address' => 'nullable|string',
-            'payment_method' => 'required|string',
-            'items' => 'required|array|min:1',
-            'items.*.product_id' => 'required|exists:products,id',
-            'items.*.quantity' => 'required|integer|min:1',
+            'zone' => 'nullable|string|max:100',
+            'landmark' => 'nullable|string|max:255',
             'notes' => 'nullable|string',
-            'idempotency_key' => 'nullable|string',
+            'payment_method' => 'nullable|string',
+            'idempotency_key' => 'nullable|string|max:100',
+            'order_source' => 'nullable|string|max:50',
+            'address_id' => 'nullable|integer',
+            'items' => 'required|array|min:1',
+            'items.*.product_id' => 'required|integer|exists:products,id',
+            'items.*.quantity' => 'required|integer|min:1',
         ]);
 
         if ($validator->fails()) {
             return $this->errorResponse('Order validation failed', $validator->errors(), 422);
         }
 
+        // Verify that a customer mobile phone number is provided
+        $rawPhone = $request->input('customer_phone') 
+            ?? $request->input('phone') 
+            ?? $request->input('customer.phone');
+
+        if (empty(trim((string)$rawPhone))) {
+            return $this->errorResponse('A valid mobile phone number is required.', [
+                'customer_phone' => ['The customer phone number is required.']
+            ], 422);
+        }
+
         try {
             $input = $request->all();
-            
-            // Normalize payload fields for backwards compatibility
-            $input['customer_name'] = $input['name'] ?? $input['customer_name'] ?? $input['customer']['name'] ?? 'Valued Customer';
-            $input['customer_phone'] = $input['phone'] ?? $input['customer_phone'] ?? $input['customer']['phone'] ?? '';
-            $input['villa_number'] = $input['villa_number'] ?? $input['address']['villa_number'] ?? '';
-            $input['delivery_address'] = is_string($input['address'] ?? null) ? $input['address'] : ($input['delivery_address'] ?? $input['address']['street_address'] ?? '');
+            if ($idempotencyKey) {
+                $input['idempotency_key'] = $idempotencyKey;
+            }
+
+            // Normalize customer identifiers
+            $input['customer_phone'] = trim((string)$rawPhone);
+            $input['customer_name'] = trim($input['customer_name'] ?? $input['name'] ?? $input['customer']['name'] ?? 'Valued Customer');
+
+            // Normalize structured delivery address fields
+            $input['villa_number'] = trim($input['villa_number'] ?? $input['address']['villa_number'] ?? '');
+            $input['street_address'] = trim(
+                $input['street_address'] 
+                ?? $input['delivery_address'] 
+                ?? (is_string($input['address'] ?? null) ? $input['address'] : ($input['address']['street_address'] ?? ''))
+            );
+            $input['delivery_address'] = $input['street_address'];
+            $input['zone'] = trim($input['zone'] ?? $input['address']['zone'] ?? '');
+
+            // Enforce Cash on Delivery (COD) strictly for customer checkout
+            $input['payment_method'] = 'cod';
 
             $result = $this->orderCreationService->createOrder($input);
+            $order = $result['order'];
 
             return $this->successResponse([
-                'order' => $result['order'],
-                'order_number' => $result['order']->order_number,
-                'status' => $result['order']->status,
-                'whatsapp_status' => $result['order']->whatsapp_status,
+                'order' => $order,
+                'order_number' => $order->order_number,
+                'customer_order_number' => $order->customer_order_number,
+                'status' => $order->status,
+                'payment_method' => $order->payment_method,
+                'whatsapp_status' => $order->whatsapp_status,
                 'whatsapp_url' => $result['whatsapp_url'],
                 'message_body' => $result['message_body'],
-                'total_amount' => (string) $result['order']->total_amount,
+                'whatsapp' => [
+                    'url' => $result['whatsapp_url'],
+                    'message' => $result['message_body'],
+                ],
+                'total_amount' => (string) $order->total_amount,
                 'is_duplicate' => $result['is_duplicate'] ?? false,
             ], 'Order created successfully', 201);
 
-        } catch (\Exception $e) {
+        } catch (\InvalidArgumentException $e) {
+            \Illuminate\Support\Facades\Log::warning('Order validation/business exception: ' . $e->getMessage(), [
+                'phone_hash' => substr(hash('sha256', (string)$rawPhone), 0, 10),
+            ]);
+            return $this->errorResponse($e->getMessage(), ['order' => [$e->getMessage()]], 422);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Order creation error: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
+            ]);
             return $this->errorResponse($e->getMessage(), [], 400);
         }
     }
