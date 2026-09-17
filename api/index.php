@@ -69,6 +69,21 @@ try {
         $_SERVER[$key] = $val;
     }
 
+    // Normalize SCRIPT_NAME, PHP_SELF, and REQUEST_URI for Vercel Serverless routing
+    $_SERVER['SCRIPT_NAME'] = '/index.php';
+    $_SERVER['PHP_SELF'] = '/index.php';
+
+    if (isset($_SERVER['REQUEST_URI'])) {
+        $uri = $_SERVER['REQUEST_URI'];
+        if (str_contains($uri, '/api/index.php')) {
+            $uri = str_replace('/api/index.php', '', $uri);
+        }
+        if ($uri === '' || $uri[0] !== '/') {
+            $uri = '/' . $uri;
+        }
+        $_SERVER['REQUEST_URI'] = $uri;
+    }
+
     // 2. Database Copy / Restore to /tmp
     $sqliteTmp = '/tmp/database.sqlite';
     $sqliteSource = __DIR__ . '/../database/database.sqlite';

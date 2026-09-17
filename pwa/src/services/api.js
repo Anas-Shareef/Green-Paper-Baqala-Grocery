@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const BACKEND_DOMAIN = 'https://baqqala-admin.vercel.app/api/index.php/api';
+const BACKEND_DOMAIN = 'https://baqqala-admin.vercel.app/api';
 
 const getApiUrl = (endpoint) => {
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
