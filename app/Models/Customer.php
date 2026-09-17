@@ -38,7 +38,7 @@ class Customer extends Model
 
     public function defaultAddress()
     {
-        return $this->hasOne(CustomerAddress::class)->where('is_default', true);
+        return $this->hasOne(CustomerAddress::class)->whereRaw('is_default = true');
     }
 
     public function getTotalOrdersAttribute(): int
