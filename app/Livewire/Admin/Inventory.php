@@ -9,15 +9,42 @@ use App\Models\StockCountItem;
 use App\Models\StockMovement;
 use App\Services\InventoryService;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Component;
+use Livewire\WithFileUploads;
 use Livewire\WithPagination;
 
 class Inventory extends Component
 {
-    use WithPagination;
+    use WithPagination, WithFileUploads;
 
-    // Navigation Tabs: stock, movements, counts, reorder, valuation
+    // Navigation Tabs: stock, categories, movements, counts, reorder, valuation
     public string $activeTab = 'stock';
+
+    // Bulk selection state
+    public array $selectedProductIds = [];
+    public bool $selectAll = false;
+
+    // Product image state
+    public $productImage = null;
+    public ?string $currentImageUrl = null;
+
+    // Import Modal State
+    public bool $showImportModal = false;
+    public $importFile = null;
+    public bool $importStockQuantities = false;
+    public ?array $importSummary = null;
+
+    // Category Management Tab & Modal State
+    public bool $showCategoryModal = false;
+    public ?int $editingCategoryId = null;
+    public string $categoryName = '';
+    public string $categoryCode = '';
+    public $categoryImage = null;
+    public ?string $currentCategoryImageUrl = null;
+    public bool $showDeleteCategoryModal = false;
+    public ?int $deleteCategoryId = null;
+    public ?int $reassignCategoryId = null;
 
     // Filters & Search
     public string $search = '';
@@ -209,9 +236,15 @@ class Inventory extends Component
             'expiryDate' => 'nullable|date',
         ]);
 
+        $imageData = [];
+        if ($this->productImage) {
+            $path = $this->productImage->store('products', 'public');
+            $imageData['image'] = $path;
+        }
+
         if ($this->editingProductId) {
             $p = Product::findOrFail($this->editingProductId);
-            $p->update([
+            $updateData = array_merge([
                 'barcode' => $this->barcode,
                 'sku' => $this->sku ?: null,
                 'name' => $this->name,
@@ -224,10 +257,12 @@ class Inventory extends Component
                 'brand' => $this->brand ?: null,
                 'expiry_date' => $this->expiryDate ?: null,
                 'supplier_name' => $this->supplierName ?: null,
-            ]);
+            ], $imageData);
+
+            $p->update($updateData);
             session()->flash('message', "Product '{$p->name}' updated successfully.");
         } else {
-            $p = Product::create([
+            $createData = array_merge([
                 'barcode' => $this->barcode,
                 'sku' => $this->sku ?: null,
                 'name' => $this->name,
@@ -242,7 +277,9 @@ class Inventory extends Component
                 'expiry_date' => $this->expiryDate ?: null,
                 'supplier_name' => $this->supplierName ?: null,
                 'status' => 'active',
-            ]);
+            ], $imageData);
+
+            $p = Product::create($createData);
 
             StockMovement::create([
                 'product_id' => $p->id,
@@ -260,6 +297,245 @@ class Inventory extends Component
 
         $this->showProductModal = false;
         $this->resetProductForm();
+    }
+
+    public function updatedSelectAll($value)
+    {
+        if ($value) {
+            $this->selectedProductIds = $this->buildStockQuery()->pluck('id')->map(fn($id) => (string)$id)->toArray();
+        } else {
+            $this->selectedProductIds = [];
+        }
+    }
+
+    public function bulkDelete()
+    {
+        if (empty($this->selectedProductIds)) return;
+
+        $deleted = 0;
+        $archived = 0;
+
+        foreach ($this->selectedProductIds as $id) {
+            $p = Product::find($id);
+            if (!$p) continue;
+
+            $hasOrders = \App\Models\OrderItem::where('product_id', $p->id)->exists();
+            $hasReceipts = \App\Models\StockReceiptItem::where('product_id', $p->id)->exists();
+            $hasMovements = StockMovement::where('product_id', $p->id)->exists();
+
+            if ($hasOrders || $hasReceipts || $hasMovements) {
+                $p->update(['status' => 'inactive']);
+                $archived++;
+            } else {
+                $p->delete();
+                $deleted++;
+            }
+        }
+
+        $this->selectedProductIds = [];
+        $this->selectAll = false;
+        session()->flash('message', "Bulk delete complete: {$deleted} permanently deleted, {$archived} safely archived to protect order/movement history.");
+    }
+
+    public function bulkCategory(int $catId)
+    {
+        if (empty($this->selectedProductIds)) return;
+        Product::whereIn('id', $this->selectedProductIds)->update(['category_id' => $catId]);
+        $count = count($this->selectedProductIds);
+        $this->selectedProductIds = [];
+        $this->selectAll = false;
+        session()->flash('message', "Updated category for {$count} products.");
+    }
+
+    public function bulkStatus(string $status)
+    {
+        if (empty($this->selectedProductIds)) return;
+        Product::whereIn('id', $this->selectedProductIds)->update(['status' => $status]);
+        $count = count($this->selectedProductIds);
+        $this->selectedProductIds = [];
+        $this->selectAll = false;
+        session()->flash('message', "Updated status to '{$status}' for {$count} products.");
+    }
+
+    // ==========================================
+    // CATEGORY MANAGEMENT
+    // ==========================================
+
+    public function openCategoryModal(?int $id = null)
+    {
+        if ($id) {
+            $cat = Category::findOrFail($id);
+            $this->editingCategoryId = $cat->id;
+            $this->categoryName = $cat->name;
+            $this->categoryCode = $cat->code ?? '';
+            $this->currentCategoryImageUrl = $cat->image_url;
+            $this->categoryImage = null;
+        } else {
+            $this->editingCategoryId = null;
+            $this->categoryName = '';
+            $this->categoryCode = '';
+            $this->currentCategoryImageUrl = null;
+            $this->categoryImage = null;
+        }
+        $this->showCategoryModal = true;
+    }
+
+    public function saveCategory()
+    {
+        $this->validate([
+            'categoryName' => 'required|string|max:255',
+        ]);
+
+        $data = [
+            'name' => $this->categoryName,
+            'slug' => \Illuminate\Support\Str::slug($this->categoryName),
+            'code' => $this->categoryCode ?: strtoupper(\Illuminate\Support\Str::substr($this->categoryName, 0, 3)),
+            'status' => 'active',
+        ];
+
+        if ($this->categoryImage) {
+            $data['image'] = $this->categoryImage->store('categories', 'public');
+        }
+
+        if ($this->editingCategoryId) {
+            $cat = Category::findOrFail($this->editingCategoryId);
+            $cat->update($data);
+            session()->flash('message', "Category '{$cat->name}' updated successfully.");
+        } else {
+            Category::create($data);
+            session()->flash('message', "Category '{$this->categoryName}' created successfully.");
+        }
+
+        $this->showCategoryModal = false;
+    }
+
+    public function confirmDeleteCategory(int $id)
+    {
+        $cat = Category::withCount('products')->findOrFail($id);
+        if ($cat->products_count === 0) {
+            $cat->delete();
+            session()->flash('message', "Category deleted successfully.");
+        } else {
+            $this->deleteCategoryId = $id;
+            $this->reassignCategoryId = null;
+            $this->showDeleteCategoryModal = true;
+        }
+    }
+
+    public function executeDeleteCategory()
+    {
+        if (!$this->deleteCategoryId) return;
+
+        $cat = Category::findOrFail($this->deleteCategoryId);
+
+        if ($this->reassignCategoryId) {
+            Product::where('category_id', $cat->id)->update(['category_id' => $this->reassignCategoryId]);
+            $cat->delete();
+            session()->flash('message', "Products reassigned and category removed.");
+        } else {
+            $cat->update(['status' => 'inactive']);
+            Product::where('category_id', $cat->id)->update(['status' => 'inactive']);
+            session()->flash('message', "Category and related products safely marked as inactive.");
+        }
+
+        $this->showDeleteCategoryModal = false;
+        $this->deleteCategoryId = null;
+    }
+
+    // ==========================================
+    // EXCEL / CSV PRODUCT IMPORT
+    // ==========================================
+
+    public function processProductImport()
+    {
+        $this->validate([
+            'importFile' => 'required|file|max:10240',
+        ]);
+
+        try {
+            $path = $this->importFile->getRealPath();
+            $handle = fopen($path, 'r');
+            if (!$handle) {
+                session()->flash('error', 'Unable to open uploaded file.');
+                return;
+            }
+
+            $rawHeader = fgetcsv($handle);
+            if (!$rawHeader) {
+                fclose($handle);
+                session()->flash('error', 'Uploaded file is empty.');
+                return;
+            }
+
+            $rawHeader[0] = preg_replace('/^\xEF\xBB\xBF/', '', $rawHeader[0]);
+            $headerMap = [];
+            foreach ($rawHeader as $idx => $col) {
+                $headerMap[trim(strtolower($col))] = $idx;
+            }
+
+            $categories = Category::all()->keyBy(fn($c) => strtolower($c->name));
+            $defaultCat = Category::first();
+            $imported = 0;
+            $updated = 0;
+
+            \Illuminate\Support\Facades\DB::transaction(function () use ($handle, $headerMap, $categories, $defaultCat, &$imported, &$updated) {
+                while (($data = fgetcsv($handle)) !== false) {
+                    if (empty(array_filter($data))) continue;
+
+                    $name = trim($data[$headerMap['name'] ?? 0] ?? '');
+                    if (empty($name)) continue;
+
+                    $sku = isset($headerMap['sku']) ? trim($data[$headerMap['sku']] ?? '') : ('SKU-' . strtoupper(\Illuminate\Support\Str::random(6)));
+                    $barcode = isset($headerMap['barcode']) ? trim($data[$headerMap['barcode']] ?? '') : ('629' . rand(1000000000, 9999999999));
+                    $catName = isset($headerMap['category']) ? strtolower(trim($data[$headerMap['category']] ?? '')) : '';
+                    $catId = isset($categories[$catName]) ? $categories[$catName]->id : ($defaultCat?->id ?? 1);
+                    $unit = isset($headerMap['unit']) ? trim($data[$headerMap['unit']] ?? '1 unit') : '1 unit';
+                    $sellingPrice = max(0, floatval($data[$headerMap['selling_price'] ?? $headerMap['retail_price'] ?? 0] ?? 0));
+                    $costPrice = max(0, floatval($data[$headerMap['cost_price'] ?? $headerMap['wholesale_cost'] ?? 0] ?? 0));
+                    $stockQty = max(0, intval($data[$headerMap['stock_quantity'] ?? 0] ?? 0));
+                    $minStock = max(1, intval($data[$headerMap['min_stock'] ?? 5] ?? 5));
+                    $status = isset($headerMap['status']) ? strtolower(trim($data[$headerMap['status']] ?? 'active')) : 'active';
+
+                    $product = Product::where('sku', $sku)->first();
+                    if ($product) {
+                        $updateData = [
+                            'name' => $name,
+                            'category_id' => $catId,
+                            'unit' => $unit,
+                            'retail_price' => $sellingPrice,
+                            'wholesale_cost' => $costPrice,
+                            'minimum_stock_level' => $minStock,
+                            'status' => $status,
+                        ];
+                        if (!empty($barcode)) $updateData['barcode'] = $barcode;
+                        if ($this->importStockQuantities) $updateData['stock_quantity'] = $stockQty;
+                        $product->update($updateData);
+                        $updated++;
+                    } else {
+                        Product::create([
+                            'name' => $name,
+                            'sku' => $sku,
+                            'barcode' => $barcode,
+                            'category_id' => $catId,
+                            'unit' => $unit,
+                            'retail_price' => $sellingPrice,
+                            'wholesale_cost' => $costPrice,
+                            'stock_quantity' => $stockQty,
+                            'minimum_stock_level' => $minStock,
+                            'status' => $status,
+                        ]);
+                        $imported++;
+                    }
+                }
+            });
+
+            fclose($handle);
+            $this->showImportModal = false;
+            $this->importFile = null;
+            session()->flash('message', "Import successful: {$imported} new products created, {$updated} existing updated.");
+        } catch (\Throwable $e) {
+            session()->flash('error', "Import error: " . $e->getMessage());
+        }
     }
 
     private function resetProductForm()

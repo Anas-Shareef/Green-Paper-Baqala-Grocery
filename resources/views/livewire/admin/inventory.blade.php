@@ -11,23 +11,19 @@
         </div>
         
         <div class="flex flex-wrap items-center gap-2.5">
-            <!-- AUTHORITATIVE LINK TO STOCK RECEIVING STATION -->
-            <a href="/admin/receiving" class="btn-glow flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-xl shadow-xs text-xs">
+            <button wire:click="createProduct" class="btn-glow py-2 px-3.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs flex items-center gap-1.5">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                Receive Stock
-            </a>
-
-            <button wire:click="$set('showNewCountModal', true)" class="btn-outline py-2 px-3.5 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded-xl border border-slate-300">
-                + Start Stock Count
-            </button>
-
-            <button wire:click="exportCsv" class="btn-outline py-2 px-3 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded-xl border border-slate-300 flex items-center gap-1.5">
-                <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                Export CSV
-            </button>
-
-            <button wire:click="createProduct" class="btn-outline py-2 px-3.5 text-xs font-bold text-emerald-700 border border-emerald-300 bg-emerald-50/50 hover:bg-emerald-100 rounded-xl">
                 + Add Product
+            </button>
+
+            <button wire:click="$set('showImportModal', true)" class="btn-outline py-2 px-3.5 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded-xl border border-slate-300 flex items-center gap-1.5 bg-white shadow-xs">
+                <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                Import
+            </button>
+
+            <button wire:click="exportCsv" class="btn-outline py-2 px-3.5 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded-xl border border-slate-300 flex items-center gap-1.5 bg-white shadow-xs">
+                <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Export
             </button>
         </div>
     </div>
@@ -117,13 +113,19 @@
     <div class="flex items-center gap-2 border-b border-slate-200 text-xs font-bold">
         <button wire:click="setTab('stock')" class="pb-3 px-4 transition-all flex items-center gap-2 border-b-2 {{ $activeTab === 'stock' ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-slate-500 hover:text-slate-900' }}">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
-            Stock Items
+            Products
             <span class="badge {{ $activeTab === 'stock' ? 'badge-emerald' : 'badge-slate' }}">{{ $products->total() }}</span>
+        </button>
+
+        <button wire:click="setTab('categories')" class="pb-3 px-4 transition-all flex items-center gap-2 border-b-2 {{ $activeTab === 'categories' ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-slate-500 hover:text-slate-900' }}">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+            Categories
+            <span class="badge badge-slate">{{ $categories->count() }}</span>
         </button>
 
         <button wire:click="setTab('movements')" class="pb-3 px-4 transition-all flex items-center gap-2 border-b-2 {{ $activeTab === 'movements' ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-slate-500 hover:text-slate-900' }}">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
-            Stock Movement Ledger
+            Stock Movements
             <span class="badge badge-slate">Audit Trail</span>
         </button>
 
@@ -197,6 +199,9 @@
                 <table class="w-full text-left text-xs text-slate-700">
                     <thead class="tbl-head bg-slate-50 border-b border-slate-200 font-bold uppercase tracking-wider text-[11px] text-slate-500">
                         <tr>
+                            <th class="p-3.5 w-10 text-center" wire:click.stop>
+                                <input type="checkbox" wire:model.live="selectAll" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                            </th>
                             <th class="p-3.5">Product & SKU</th>
                             <th class="p-3.5">Category</th>
                             <th class="p-3.5 text-right">Wholesale</th>
@@ -220,12 +225,19 @@
                             $margin = (float) $p->retail_price - (float) $p->wholesale_cost;
                             $marginPct = (float) $p->retail_price > 0 ? round(($margin / (float) $p->retail_price) * 100, 1) : 0;
                         @endphp
-                        <tr class="tbl-row hover:bg-slate-50/80 cursor-pointer" wire:click="openDrawer({{ $p->id }})">
+                        <tr class="tbl-row hover:bg-slate-50/80 cursor-pointer {{ in_array((string)$p->id, $selectedProductIds) ? 'bg-emerald-50/40' : '' }}" wire:click="openDrawer({{ $p->id }})">
+                            <!-- Select Checkbox -->
+                            <td class="p-3.5 text-center" wire:click.stop>
+                                <input type="checkbox" wire:model.live="selectedProductIds" value="{{ $p->id }}" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                            </td>
+
                             <!-- Product Details -->
                             <td class="tbl-cell">
                                 <div class="flex items-center gap-3">
                                     <div class="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 shrink-0 overflow-hidden flex items-center justify-center">
-                                        @if($p->image)
+                                        @if($p->image_url)
+                                        <img src="{{ $p->image_url }}" alt="{{ $p->name }}" class="w-full h-full object-cover">
+                                        @elseif($p->image)
                                         <img src="{{ $p->image }}" alt="{{ $p->name }}" class="w-full h-full object-cover">
                                         @else
                                         <span class="text-slate-400 font-black text-xs">{{ substr($p->name, 0, 2) }}</span>
@@ -325,6 +337,90 @@
             <div class="p-4 border-t border-slate-100">
                 {{ $products->links() }}
             </div>
+        </div>
+    </div>
+    @endif
+
+    <!-- FLOATING BULK ACTIONS TOOLBAR -->
+    @if(count($selectedProductIds) > 0)
+    <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-4 border border-slate-700 animate-in fade-in slide-in-from-bottom-4">
+        <span class="text-xs font-bold text-slate-300">{{ count($selectedProductIds) }} selected</span>
+        
+        <button wire:click="bulkDelete" wire:confirm="Are you sure you want to delete selected products? Products with order or movement history will be safely archived to protect ledger history." class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors">
+            Delete Selected
+        </button>
+
+        <select wire:change="bulkCategory($event.target.value)" class="px-3 py-1.5 bg-slate-800 text-white border border-slate-700 rounded-xl text-xs font-bold outline-none">
+            <option value="">Assign Category...</option>
+            @foreach($categories as $c)
+            <option value="{{ $c->id }}">{{ $c->name }}</option>
+            @endforeach
+        </select>
+
+        <select wire:change="bulkStatus($event.target.value)" class="px-3 py-1.5 bg-slate-800 text-white border border-slate-700 rounded-xl text-xs font-bold outline-none">
+            <option value="">Set Status...</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+        </select>
+
+        <button wire:click="$set('selectedProductIds', [])" class="text-xs text-slate-400 hover:text-white font-bold ml-2">
+            Clear
+        </button>
+    </div>
+    @endif
+
+    <!-- TAB: CATEGORIES MANAGEMENT -->
+    @if($activeTab === 'categories')
+    <div class="space-y-4">
+        <div class="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+            <div>
+                <h3 class="font-bold text-slate-900 text-sm">Grocery Categories</h3>
+                <p class="text-[11px] text-slate-500">Manage categories, upload thumbnails, and organize customer catalog groupings.</p>
+            </div>
+            <button wire:click="openCategoryModal()" class="btn-glow py-2 px-3.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs flex items-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                + Add Category
+            </button>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            @forelse($categories as $c)
+            <div class="bg-white border border-slate-200/80 rounded-2xl p-4 space-y-3 hover:shadow-md transition-shadow relative">
+                <div class="flex items-center gap-3">
+                    <div class="w-14 h-14 rounded-xl bg-slate-100 border border-slate-200 shrink-0 overflow-hidden flex items-center justify-center">
+                        @if($c->image_url)
+                        <img src="{{ $c->image_url }}" alt="{{ $c->name }}" class="w-full h-full object-cover">
+                        @elseif($c->image)
+                        <img src="{{ $c->image }}" alt="{{ $c->name }}" class="w-full h-full object-cover">
+                        @else
+                        <span class="text-slate-400 font-black text-sm">{{ substr($c->name, 0, 2) }}</span>
+                        @endif
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h4 class="font-bold text-slate-900 text-sm truncate">{{ $c->name }}</h4>
+                        <span class="text-[11px] font-mono text-slate-500 font-semibold">{{ $c->code ?: 'CAT-'.$c->id }}</span>
+                        <div class="mt-1">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                {{ $c->products()->count() }} Products
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                    <button wire:click="openCategoryModal({{ $c->id }})" class="px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded-lg border border-slate-200">
+                        Edit
+                    </button>
+                    <button wire:click="confirmDeleteCategory({{ $c->id }})" class="px-2.5 py-1 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200">
+                        Delete
+                    </button>
+                </div>
+            </div>
+            @empty
+            <div class="col-span-full p-8 text-center text-slate-400 bg-white rounded-2xl border border-slate-200">
+                No categories found. Click "+ Add Category" to create one.
+            </div>
+            @endforelse
         </div>
     </div>
     @endif
@@ -1023,11 +1119,154 @@
                     </div>
                 </div>
 
+                <!-- Product Image Upload -->
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Product Image (Optional)</label>
+                    <div class="flex items-center gap-3">
+                        @if($productImage)
+                        <img src="{{ $productImage->temporaryUrl() }}" class="w-12 h-12 rounded-xl object-cover border border-slate-200">
+                        @elseif($currentImageUrl)
+                        <img src="{{ $currentImageUrl }}" class="w-12 h-12 rounded-xl object-cover border border-slate-200">
+                        @endif
+                        <input type="file" wire:model="productImage" accept="image/*" class="text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100">
+                    </div>
+                    <div wire:loading wire:target="productImage" class="text-[10px] text-emerald-600 font-bold mt-1">Uploading image preview...</div>
+                </div>
+
                 <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                     <button type="button" wire:click="$set('showProductModal', false)" class="btn-outline py-2 px-4 text-xs font-bold">Cancel</button>
                     <button type="submit" class="btn-glow py-2 px-5 text-xs font-bold">Save Product</button>
                 </div>
             </form>
+        </div>
+    </div>
+    @endif
+
+    <!-- EXCEL / CSV PRODUCTS IMPORT MODAL -->
+    @if($showImportModal)
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+        <div class="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-4 border border-slate-200">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    </div>
+                    <h3 class="font-black text-slate-900 text-base">Import Products via Excel / CSV</h3>
+                </div>
+                <button wire:click="$set('showImportModal', false)" class="text-slate-400 hover:text-slate-600 font-bold text-xl">&times;</button>
+            </div>
+
+            <!-- Template Download -->
+            <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between gap-4">
+                <div>
+                    <h4 class="font-bold text-emerald-950 text-xs">1. Download Official Template</h4>
+                    <p class="text-[11px] text-emerald-800 mt-0.5">Includes columns for Name, SKU, Barcode, Category, Unit, Cost, and Retail Price.</p>
+                </div>
+                <a href="/api/v1/admin/products/import-template" download="Baqqala_Products_Import_Template.csv" class="btn-glow py-1.5 px-3 text-xs font-bold shrink-0">
+                    Download
+                </a>
+            </div>
+
+            <!-- File Upload Input -->
+            <form wire:submit.prevent="processProductImport" class="space-y-4 text-xs">
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">2. Select Spreadsheet File (.csv, .xlsx)</label>
+                    <input type="file" wire:model="importFile" required accept=".csv,.txt" class="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-100 file:text-slate-800 hover:file:bg-slate-200">
+                    <div wire:loading wire:target="importFile" class="text-[10px] text-emerald-600 font-bold mt-1">Reading spreadsheet...</div>
+                </div>
+
+                <div class="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                    <input type="checkbox" wire:model="importStockQuantities" id="importStockQuantities" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                    <label for="importStockQuantities" class="font-bold text-slate-700 cursor-pointer">
+                        Update physical stock quantities for existing SKUs
+                    </label>
+                </div>
+
+                <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                    <button type="button" wire:click="$set('showImportModal', false)" class="btn-outline py-2 px-4 text-xs font-bold">Cancel</button>
+                    <button type="submit" wire:loading.attr="disabled" class="btn-glow py-2 px-5 text-xs font-bold">
+                        <span wire:loading.remove wire:target="processProductImport">Execute Import</span>
+                        <span wire:loading wire:target="processProductImport">Importing...</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    @endif
+
+    <!-- CATEGORY CREATE / EDIT MODAL -->
+    @if($showCategoryModal)
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+        <div class="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 border border-slate-200">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="font-black text-slate-900 text-base">{{ $editingCategoryId ? 'Edit Category' : 'New Category' }}</h3>
+                <button wire:click="$set('showCategoryModal', false)" class="text-slate-400 hover:text-slate-600 font-bold text-xl">&times;</button>
+            </div>
+
+            <form wire:submit.prevent="saveCategory" class="space-y-3.5 text-xs">
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Category Name *</label>
+                    <input type="text" wire:model="categoryName" required placeholder="e.g. Dairy & Eggs" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold focus:border-emerald-500">
+                </div>
+
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Code / Prefix</label>
+                    <input type="text" wire:model="categoryCode" placeholder="e.g. DRY" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono uppercase focus:border-emerald-500">
+                </div>
+
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Thumbnail Image</label>
+                    <div class="flex items-center gap-3">
+                        @if($categoryImage)
+                        <img src="{{ $categoryImage->temporaryUrl() }}" class="w-12 h-12 rounded-xl object-cover border border-slate-200">
+                        @elseif($currentCategoryImageUrl)
+                        <img src="{{ $currentCategoryImageUrl }}" class="w-12 h-12 rounded-xl object-cover border border-slate-200">
+                        @endif
+                        <input type="file" wire:model="categoryImage" accept="image/*" class="text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100">
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                    <button type="button" wire:click="$set('showCategoryModal', false)" class="btn-outline py-2 px-4 text-xs font-bold">Cancel</button>
+                    <button type="submit" class="btn-glow py-2 px-5 text-xs font-bold">Save Category</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    @endif
+
+    <!-- CATEGORY SAFE DELETE PROTECTION MODAL -->
+    @if($showDeleteCategoryModal)
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+        <div class="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 border border-rose-200">
+            <div class="flex items-center gap-3 border-b border-slate-100 pb-3">
+                <div class="w-10 h-10 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                </div>
+                <div>
+                    <h3 class="font-black text-slate-900 text-base">Category Safe Deletion</h3>
+                    <p class="text-[11px] text-slate-500">This category has existing products assigned to it.</p>
+                </div>
+            </div>
+
+            <div class="space-y-3 text-xs">
+                <p class="text-slate-600 font-medium">To protect your catalog integrity, you can reassign existing products to another category, or safely deactivate them.</p>
+
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Reassign products to:</label>
+                    <select wire:model="reassignCategoryId" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-medium">
+                        <option value="">Do not reassign (deactivate products)</option>
+                        @foreach($categories->where('id', '!=', $deleteCategoryId) as $c)
+                        <option value="{{ $c->id }}">{{ $c->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 text-xs font-bold">
+                <button type="button" wire:click="$set('showDeleteCategoryModal', false)" class="btn-outline py-2 px-4">Cancel</button>
+                <button type="button" wire:click="executeDeleteCategory" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl">Proceed</button>
+            </div>
         </div>
     </div>
     @endif

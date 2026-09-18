@@ -10,11 +10,16 @@ use App\Services\OrderService;
 use App\Services\WhatsAppOrderService;
 use App\Services\WhatsAppService;
 use Livewire\Component;
+use Livewire\WithFileUploads;
 use Livewire\WithPagination;
 
 class Orders extends Component
 {
-    use WithPagination;
+    use WithPagination, WithFileUploads;
+
+    // Order Import Modal
+    public bool $showImportModal = false;
+    public $orderImportFile = null;
 
     protected $listeners = [
         'orderReceived' => '$refresh',
@@ -674,6 +679,121 @@ class Orders extends Component
         }
 
         return $query;
+    }
+
+    public function processOrderImport()
+    {
+        $this->validate([
+            'orderImportFile' => 'required|file|max:10240',
+        ]);
+
+        try {
+            $path = $this->orderImportFile->getRealPath();
+            $handle = fopen($path, 'r');
+            if (!$handle) {
+                session()->flash('error', 'Unable to open uploaded orders file.');
+                return;
+            }
+
+            $rawHeader = fgetcsv($handle);
+            if (!$rawHeader) {
+                fclose($handle);
+                session()->flash('error', 'Uploaded file is empty.');
+                return;
+            }
+
+            $rawHeader[0] = preg_replace('/^\xEF\xBB\xBF/', '', $rawHeader[0]);
+            $headerMap = [];
+            foreach ($rawHeader as $idx => $col) {
+                $headerMap[trim(strtolower($col))] = $idx;
+            }
+
+            $rows = [];
+            while (($data = fgetcsv($handle)) !== false) {
+                if (empty(array_filter($data))) continue;
+                $phone = trim($data[$headerMap['customer_phone'] ?? 1] ?? '');
+                if (empty($phone)) continue;
+
+                $rows[] = [
+                    'customer_name' => trim($data[$headerMap['customer_name'] ?? 0] ?? 'Customer'),
+                    'customer_phone' => $phone,
+                    'villa_number' => trim($data[$headerMap['villa_number'] ?? 2] ?? ''),
+                    'street_address' => trim($data[$headerMap['street_address'] ?? 3] ?? ''),
+                    'payment_method' => strtolower(trim($data[$headerMap['payment_method'] ?? 4] ?? 'cash')),
+                    'payment_status' => strtolower(trim($data[$headerMap['payment_status'] ?? 5] ?? 'unpaid')),
+                    'status' => strtolower(trim($data[$headerMap['status'] ?? 6] ?? 'delivered')),
+                    'notes' => trim($data[$headerMap['notes'] ?? 7] ?? ''),
+                    'item_sku_or_name' => trim($data[$headerMap['item_sku_or_name'] ?? 8] ?? 'General Grocery'),
+                    'item_quantity' => max(1, intval($data[$headerMap['item_quantity'] ?? 9] ?? 1)),
+                    'item_price' => max(0, floatval($data[$headerMap['item_price'] ?? 10] ?? 0)),
+                ];
+            }
+            fclose($handle);
+
+            $importedCount = 0;
+            \Illuminate\Support\Facades\DB::transaction(function () use ($rows, &$importedCount) {
+                $grouped = [];
+                foreach ($rows as $r) {
+                    $grouped[$r['customer_phone']][] = $r;
+                }
+
+                foreach ($grouped as $phone => $items) {
+                    $first = $items[0];
+                    $customer = \App\Models\Customer::firstOrCreate(
+                        ['phone' => $phone],
+                        [
+                            'name' => $first['customer_name'],
+                            'villa_number' => $first['villa_number'],
+                            'street_address' => $first['street_address'],
+                            'zone' => 'Default',
+                        ]
+                    );
+
+                    $orderNumber = 'ORD-' . strtoupper(\Illuminate\Support\Str::random(8));
+                    $subtotal = 0;
+                    foreach ($items as $i) {
+                        $subtotal += ($i['item_quantity'] * $i['item_price']);
+                    }
+
+                    $order = Order::create([
+                        'order_number' => $orderNumber,
+                        'customer_id' => $customer->id,
+                        'customer_name_snapshot' => $customer->name,
+                        'customer_phone_snapshot' => $customer->phone,
+                        'customer_villa' => $first['villa_number'],
+                        'customer_address' => $first['street_address'],
+                        'delivery_address' => $first['street_address'],
+                        'status' => $first['status'],
+                        'payment_method' => $first['payment_method'],
+                        'payment_status' => $first['payment_status'],
+                        'subtotal' => $subtotal,
+                        'total_amount' => $subtotal,
+                        'order_source' => 'import',
+                        'notes' => $first['notes'] ?: 'Imported via CSV',
+                    ]);
+
+                    foreach ($items as $i) {
+                        $p = Product::where('sku', $i['item_sku_or_name'])->orWhere('name', $i['item_sku_or_name'])->first();
+                        OrderItem::create([
+                            'order_id' => $order->id,
+                            'product_id' => $p?->id,
+                            'product_name' => $p ? $p->name : $i['item_sku_or_name'],
+                            'sku' => $p?->sku,
+                            'unit_price' => $i['item_price'],
+                            'quantity' => $i['item_quantity'],
+                            'subtotal' => $i['item_quantity'] * $i['item_price'],
+                        ]);
+                    }
+                    $importedCount++;
+                }
+            });
+
+            $this->showImportModal = false;
+            $this->orderImportFile = null;
+            session()->flash('message', "Successfully imported {$importedCount} customer orders.");
+        } catch (\Throwable $e) {
+            session()->flash('error', "Orders import failed: " . $e->getMessage());
+        }
     }
 
     public function render()

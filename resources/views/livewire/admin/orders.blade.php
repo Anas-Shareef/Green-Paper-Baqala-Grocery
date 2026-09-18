@@ -48,11 +48,17 @@
                 <span wire:loading>Syncing...</span>
             </button>
 
-            <!-- Export CSV -->
+            <!-- Export & Import Side by Side -->
             <button wire:click="exportCsv"
                     class="px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5">
                 <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                Export CSV
+                Export
+            </button>
+
+            <button wire:click="$set('showImportModal', true)"
+                    class="px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5">
+                <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                Import
             </button>
 
             <!-- POS Counter Shortcut -->
@@ -1223,6 +1229,51 @@
                 <button wire:click="$set('showDeliverySheetModal', false)" class="btn-outline text-xs">Close</button>
             </div>
 
+        </div>
+    </div>
+    @endif
+
+    <!-- ORDERS IMPORT MODAL -->
+    @if($showImportModal)
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+        <div class="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-4 border border-slate-200">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    </div>
+                    <h3 class="font-black text-slate-900 text-base">Import Customer Orders</h3>
+                </div>
+                <button wire:click="$set('showImportModal', false)" class="text-slate-400 hover:text-slate-600 font-bold text-xl">&times;</button>
+            </div>
+
+            <!-- Download Orders Template -->
+            <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between gap-4">
+                <div>
+                    <h4 class="font-bold text-emerald-950 text-xs">1. Download Order Template</h4>
+                    <p class="text-[11px] text-emerald-800 mt-0.5">Pre-formatted with customer name, phone, villa, address, items, and totals.</p>
+                </div>
+                <a href="/api/v1/admin/orders/import-template" download="Baqqala_Orders_Import_Template.csv" class="btn-glow py-1.5 px-3 text-xs font-bold shrink-0">
+                    Download
+                </a>
+            </div>
+
+            <!-- File Upload Form -->
+            <form wire:submit.prevent="processOrderImport" class="space-y-4 text-xs">
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">2. Select Order File (.csv)</label>
+                    <input type="file" wire:model="orderImportFile" required accept=".csv,.txt" class="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-100 file:text-slate-800 hover:file:bg-slate-200">
+                    <div wire:loading wire:target="orderImportFile" class="text-[10px] text-emerald-600 font-bold mt-1">Reading orders file...</div>
+                </div>
+
+                <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                    <button type="button" wire:click="$set('showImportModal', false)" class="btn-outline py-2 px-4 text-xs font-bold">Cancel</button>
+                    <button type="submit" wire:loading.attr="disabled" class="btn-glow py-2 px-5 text-xs font-bold">
+                        <span wire:loading.remove wire:target="processOrderImport">Execute Import</span>
+                        <span wire:loading wire:target="processOrderImport">Importing Orders...</span>
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
     @endif
