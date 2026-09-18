@@ -46,6 +46,24 @@ class Product extends Model
         'expiry_date' => 'date',
     ];
 
+    protected $appends = [
+        'image_url',
+        'available_stock',
+        'price',
+    ];
+
+    public function getImageUrlAttribute(): ?string
+    {
+        $img = $this->attributes['image'] ?? null;
+        if (empty($img)) {
+            return null;
+        }
+        if (str_starts_with($img, 'http://') || str_starts_with($img, 'https://')) {
+            return $img;
+        }
+        return asset('storage/' . ltrim($img, '/'));
+    }
+
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
@@ -59,6 +77,11 @@ class Product extends Model
     public function orderItems(): HasMany
     {
         return $this->hasMany(OrderItem::class);
+    }
+
+    public function stockReceiptItems(): HasMany
+    {
+        return $this->hasMany(StockReceiptItem::class);
     }
 
     public function getAvailableStockAttribute(): int

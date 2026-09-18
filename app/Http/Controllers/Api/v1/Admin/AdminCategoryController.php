@@ -70,7 +70,12 @@ class AdminCategoryController extends BaseApiController
             $data['slug'] = Str::slug($request->input('name'));
         }
 
-        if ($request->hasFile('image_file')) {
+        if ($request->boolean('remove_image')) {
+            if ($category->image) {
+                $this->storageService->deleteFile($category->image, 'category-images');
+            }
+            $data['image'] = null;
+        } elseif ($request->hasFile('image_file')) {
             if ($category->image) {
                 $this->storageService->deleteFile($category->image, 'category-images');
             }
@@ -84,14 +89,40 @@ class AdminCategoryController extends BaseApiController
         return $this->successResponse($category->fresh(), 'Category updated successfully');
     }
 
-    public function destroy(string $id): JsonResponse
+    public function destroy(Request $request, string $id): JsonResponse
     {
         $category = Category::find($id);
         if (!$category) {
-            return $this->errorResponse('Category not found', [], 404);
+            return $this->errorResponse('Category not found', 404);
+        }
+
+        $productsCount = $category->products()->count();
+        if ($productsCount > 0) {
+            if ($request->has('move_to_category_id') && !empty($request->input('move_to_category_id'))) {
+                $targetId = (int) $request->input('move_to_category_id');
+                if ($targetId === $category->id || !Category::where('id', $targetId)->exists()) {
+                    return $this->errorResponse('Invalid target category for moving products', 422);
+                }
+                $category->products()->update(['category_id' => $targetId]);
+            } elseif ($request->boolean('archive')) {
+                $category->update(['status' => 'inactive']);
+                return $this->successResponse([
+                    'action' => 'archived',
+                    'products_count' => $productsCount,
+                ], "Category archived. {$productsCount} products remain assigned.");
+            } else {
+                return $this->errorResponse("Category contains {$productsCount} products. Please reassign products to another category or choose to archive the category.", 422, [
+                    'products_count' => $productsCount,
+                    'requires_action' => true,
+                ]);
+            }
+        }
+
+        if ($category->image) {
+            $this->storageService->deleteFile($category->image, 'category-images');
         }
 
         $category->delete();
-        return $this->successResponse(null, 'Category deleted successfully');
+        return $this->successResponse(['action' => 'deleted'], 'Category deleted successfully');
     }
 }

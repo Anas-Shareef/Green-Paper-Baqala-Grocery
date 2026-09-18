@@ -60,6 +60,12 @@ Route::prefix('v1')->group(function () {
         Route::get('/dashboard', [AdminDashboardController::class, 'index']);
 
         Route::get('/products', [AdminProductController::class, 'index']);
+        Route::get('/products/export', [AdminProductController::class, 'export']);
+        Route::get('/products/import-template', [AdminProductController::class, 'importTemplate']);
+        Route::post('/products/import', [AdminProductController::class, 'import']);
+        Route::post('/products/bulk-delete', [AdminProductController::class, 'bulkDelete']);
+        Route::post('/products/bulk-category', [AdminProductController::class, 'bulkCategory']);
+        Route::post('/products/bulk-status', [AdminProductController::class, 'bulkStatus']);
         Route::post('/products', [AdminProductController::class, 'store']);
         Route::get('/products/{id}', [AdminProductController::class, 'show']);
         Route::put('/products/{id}', [AdminProductController::class, 'update']);
@@ -102,6 +108,8 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/orders', [AdminOrderController::class, 'index']);
         Route::get('/orders/export', [AdminOrderController::class, 'export']);
+        Route::get('/orders/import-template', [AdminOrderController::class, 'importTemplate']);
+        Route::post('/orders/import', [AdminOrderController::class, 'import']);
         Route::post('/orders/bulk-action', [AdminOrderController::class, 'bulkAction']);
         Route::get('/orders/{id}', [AdminOrderController::class, 'show']);
         Route::put('/orders/{id}/status', [AdminOrderController::class, 'updateStatus']);

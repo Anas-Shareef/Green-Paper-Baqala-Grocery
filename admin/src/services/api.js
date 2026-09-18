@@ -65,6 +65,29 @@ export const adminApi = {
     const res = await client.delete(`${getApiBaseUrl()}/admin/products/${id}`);
     return res.data;
   },
+  bulkDeleteProducts: async (productIds) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/products/bulk-delete`, { product_ids: productIds });
+    return res.data;
+  },
+  bulkChangeCategory: async (productIds, categoryId) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/products/bulk-category`, { product_ids: productIds, category_id: categoryId });
+    return res.data;
+  },
+  bulkChangeStatus: async (productIds, status) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/products/bulk-status`, { product_ids: productIds, status });
+    return res.data;
+  },
+  importProducts: async (formData) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/products/import`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  },
+  getProductImportTemplateUrl: () => `${getApiBaseUrl()}/admin/products/import-template`,
+  getProductExportUrl: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return `${getApiBaseUrl()}/admin/products/export${query ? `?${query}` : ''}`;
+  },
 
   // Categories
   getCategories: async () => {
@@ -78,8 +101,8 @@ export const adminApi = {
     });
     return res.data;
   },
-  deleteCategory: async (id) => {
-    const res = await client.delete(`${getApiBaseUrl()}/admin/categories/${id}`);
+  deleteCategory: async (id, params = {}) => {
+    const res = await client.delete(`${getApiBaseUrl()}/admin/categories/${id}`, { params });
     return res.data;
   },
 
@@ -165,6 +188,17 @@ export const adminApi = {
   },
   bulkActionOrders: async (payload) => {
     const res = await client.post(`${getApiBaseUrl()}/admin/orders/bulk-action`, payload);
+    return res.data;
+  },
+  getOrderImportTemplateUrl: () => `${getApiBaseUrl()}/admin/orders/import-template`,
+  getOrderExportUrl: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return `${getApiBaseUrl()}/admin/orders/export${query ? `?${query}` : ''}`;
+  },
+  importOrders: async (formData) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/orders/import`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
     return res.data;
   },
 

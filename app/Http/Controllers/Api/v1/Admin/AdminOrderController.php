@@ -300,5 +300,251 @@ class AdminOrderController extends BaseApiController
             'Content-Disposition' => 'attachment; filename="baqqala_orders_' . date('Ymd_His') . '.csv"',
         ]);
     }
+
+    /**
+     * Download Excel / CSV Orders Import Template
+     */
+    public function importTemplate()
+    {
+        $headers = [
+            'customer_name',
+            'customer_phone',
+            'villa_number',
+            'street_address',
+            'payment_method',
+            'payment_status',
+            'status',
+            'notes',
+            'item_sku_or_name',
+            'item_quantity',
+            'item_price',
+        ];
+
+        $sampleRows = [
+            [
+                'Fatima Al Zahra',
+                '+971 50 123 4567',
+                'Villa 42',
+                'Al Safa 2, Street 14B',
+                'cash',
+                'paid',
+                'delivered',
+                'Leave at front porch if no answer',
+                'MILK-1L',
+                '2',
+                '4.50',
+            ],
+            [
+                'Rashid Al Maktoum',
+                '+971 55 987 6543',
+                'Villa 108',
+                'Jumeirah 3, Street 7',
+                'card',
+                'paid',
+                'delivered',
+                'Ring bell twice',
+                'RICE-5KG',
+                '1',
+                '32.50',
+            ],
+        ];
+
+        $output = "\xEF\xBB\xBF"; // UTF-8 BOM
+        $output .= implode(',', $headers) . "\n";
+        foreach ($sampleRows as $row) {
+            $output .= implode(',', array_map(fn($v) => '"' . str_replace('"', '""', $v) . '"', $row)) . "\n";
+        }
+
+        return response()->make($output, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="Baqqala_Orders_Import_Template.csv"',
+        ]);
+    }
+
+    /**
+     * Import Orders from CSV with Preview and Transactional Execution
+     */
+    public function import(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'file' => 'required|file|max:10240',
+            'confirm' => 'nullable|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->errorResponse('Validation failed', 422, $validator->errors());
+        }
+
+        $file = $request->file('file');
+        $handle = fopen($file->getRealPath(), 'r');
+        if (!$handle) {
+            return $this->errorResponse('Unable to open uploaded file', 400);
+        }
+
+        $rawHeader = fgetcsv($handle);
+        if (!$rawHeader) {
+            fclose($handle);
+            return $this->errorResponse('Uploaded file is empty', 400);
+        }
+
+        $rawHeader[0] = preg_replace('/^\xEF\xBB\xBF/', '', $rawHeader[0]);
+        $headerMap = [];
+        foreach ($rawHeader as $idx => $col) {
+            $headerMap[trim(strtolower($col))] = $idx;
+        }
+
+        $requiredCols = ['customer_phone', 'item_quantity', 'item_price'];
+        foreach ($requiredCols as $req) {
+            if (!isset($headerMap[$req])) {
+                fclose($handle);
+                return $this->errorResponse("Missing required column in template: '{$req}'", 422);
+            }
+        }
+
+        $rows = [];
+        $newCustomersCount = 0;
+        $existingCustomersCount = 0;
+        $validRowsCount = 0;
+        $errorsCount = 0;
+
+        $customerCache = \App\Models\Customer::all()->keyBy(fn($c) => preg_replace('/[^0-9]/', '', $c->phone));
+
+        $rowNum = 1;
+        while (($data = fgetcsv($handle)) !== false) {
+            $rowNum++;
+            if (empty(array_filter($data))) continue;
+
+            $custPhone = trim($data[$headerMap['customer_phone']] ?? '');
+            $cleanPhone = preg_replace('/[^0-9]/', '', $custPhone);
+            $custName = isset($headerMap['customer_name']) ? trim($data[$headerMap['customer_name']] ?? '') : 'Customer';
+            $villa = isset($headerMap['villa_number']) ? trim($data[$headerMap['villa_number']] ?? '') : '';
+            $street = isset($headerMap['street_address']) ? trim($data[$headerMap['street_address']] ?? '') : '';
+            $payMethod = isset($headerMap['payment_method']) ? strtolower(trim($data[$headerMap['payment_method']] ?? 'cash')) : 'cash';
+            $payStatus = isset($headerMap['payment_status']) ? strtolower(trim($data[$headerMap['payment_status']] ?? 'unpaid')) : 'unpaid';
+            $orderStatus = isset($headerMap['status']) ? strtolower(trim($data[$headerMap['status']] ?? 'delivered')) : 'delivered';
+            $notes = isset($headerMap['notes']) ? trim($data[$headerMap['notes']] ?? '') : '';
+            $itemIdentifier = isset($headerMap['item_sku_or_name']) ? trim($data[$headerMap['item_sku_or_name']] ?? '') : 'General Grocery';
+            $itemQty = max(1, intval($data[$headerMap['item_quantity']] ?? 1));
+            $itemPrice = max(0, floatval($data[$headerMap['item_price']] ?? 0));
+
+            $rowStatus = 'VALID';
+            $msg = '';
+
+            if (empty($custPhone)) {
+                $rowStatus = 'ERROR';
+                $msg = 'Customer phone is required';
+                $errorsCount++;
+            } else {
+                $validRowsCount++;
+                if (isset($customerCache[$cleanPhone])) {
+                    $existingCustomersCount++;
+                } else {
+                    $newCustomersCount++;
+                }
+            }
+
+            $rows[] = [
+                'row_number' => $rowNum,
+                'customer_name' => $custName ?: 'Customer',
+                'customer_phone' => $custPhone,
+                'villa_number' => $villa,
+                'street_address' => $street,
+                'payment_method' => $payMethod,
+                'payment_status' => $payStatus,
+                'status' => $orderStatus,
+                'notes' => $notes,
+                'item_sku_or_name' => $itemIdentifier,
+                'item_quantity' => $itemQty,
+                'item_price' => $itemPrice,
+                'line_total' => round($itemQty * $itemPrice, 2),
+                'status_code' => $rowStatus,
+                'message' => $msg,
+            ];
+        }
+
+        fclose($handle);
+
+        $isConfirm = $request->boolean('confirm');
+
+        if (!$isConfirm) {
+            return $this->successResponse([
+                'preview' => true,
+                'total_rows' => count($rows),
+                'valid_count' => $validRowsCount,
+                'new_customers_est' => $newCustomersCount,
+                'errors_count' => $errorsCount,
+                'rows' => array_slice($rows, 0, 100),
+            ], 'Orders import preview generated');
+        }
+
+        $importedOrdersCount = 0;
+
+        DB::transaction(function () use ($rows, &$importedOrdersCount) {
+            // Group valid rows by customer_phone to assemble orders
+            $grouped = [];
+            foreach ($rows as $r) {
+                if ($r['status_code'] !== 'VALID') continue;
+                $phone = $r['customer_phone'];
+                $grouped[$phone][] = $r;
+            }
+
+            foreach ($grouped as $phone => $orderRows) {
+                $cleanPhone = preg_replace('/[^0-9]/', '', $phone);
+                $first = $orderRows[0];
+
+                $customer = \App\Models\Customer::firstOrCreate(
+                    ['phone' => $phone],
+                    [
+                        'name' => $first['customer_name'],
+                        'villa_number' => $first['villa_number'],
+                        'street_address' => $first['street_address'],
+                        'zone' => 'Default',
+                    ]
+                );
+
+                $orderNumber = 'ORD-' . strtoupper(Str::random(8));
+                $subtotal = array_sum(array_column($orderRows, 'line_total'));
+
+                $order = Order::create([
+                    'order_number' => $orderNumber,
+                    'customer_id' => $customer->id,
+                    'customer_name_snapshot' => $customer->name,
+                    'customer_phone_snapshot' => $customer->phone,
+                    'customer_villa' => $first['villa_number'],
+                    'customer_address' => $first['street_address'],
+                    'delivery_address' => $first['street_address'],
+                    'status' => $first['status'],
+                    'payment_method' => $first['payment_method'],
+                    'payment_status' => $first['payment_status'],
+                    'subtotal' => $subtotal,
+                    'total_amount' => $subtotal,
+                    'order_source' => 'import',
+                    'notes' => $first['notes'] ?: 'Imported via CSV',
+                ]);
+
+                foreach ($orderRows as $rowItem) {
+                    $product = Product::where('sku', $rowItem['item_sku_or_name'])
+                        ->orWhere('name', $rowItem['item_sku_or_name'])
+                        ->first();
+
+                    OrderItem::create([
+                        'order_id' => $order->id,
+                        'product_id' => $product?->id,
+                        'product_name' => $product ? $product->name : $rowItem['item_sku_or_name'],
+                        'sku' => $product?->sku,
+                        'unit_price' => $rowItem['item_price'],
+                        'quantity' => $rowItem['item_quantity'],
+                        'subtotal' => $rowItem['line_total'],
+                    ]);
+                }
+
+                $importedOrdersCount++;
+            }
+        });
+
+        return $this->successResponse([
+            'imported_orders' => $importedOrdersCount,
+        ], "Successfully imported {$importedOrdersCount} orders.");
+    }
 }
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ShoppingBag, Eye, RefreshCw, MessageCircle, Copy, Check, CheckCircle } from 'lucide-react';
+import { ShoppingBag, Eye, RefreshCw, MessageCircle, Copy, Check, CheckCircle, Download, Upload, FileSpreadsheet, AlertCircle, X, CheckCircle2, FileText } from 'lucide-react';
 import { adminApi } from '../services/api';
 import { useAdminRealtime } from '../context/AdminRealtimeContext';
 
@@ -9,6 +9,14 @@ export function OrdersPage() {
   const [selectedStatus, setSelectedStatus] = useState('');
   const [activeOrder, setActiveOrder] = useState(null);
   const [copied, setCopied] = useState(false);
+
+  // Orders Import Modal State
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importPreview, setImportPreview] = useState(null);
+  const [importSuccess, setImportSuccess] = useState(null);
+  const [importError, setImportError] = useState(null);
 
   const { refreshRealtime } = useAdminRealtime();
 
@@ -43,6 +51,61 @@ export function OrdersPage() {
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setImportFile(file);
+      setImportPreview(null);
+      setImportSuccess(null);
+      setImportError(null);
+    }
+  };
+
+  const handlePreviewImport = async () => {
+    if (!importFile) return;
+    setImportLoading(true);
+    setImportError(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', importFile);
+      const res = await adminApi.importOrders(fd);
+      if (res && res.data) {
+        setImportPreview(res.data);
+      } else {
+        setImportError('Failed to parse file preview.');
+      }
+    } catch (err) {
+      setImportError(err.response?.data?.message || 'Error previewing import file.');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    if (!importFile) return;
+    setImportLoading(true);
+    setImportError(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', importFile);
+      fd.append('confirm', '1');
+      const res = await adminApi.importOrders(fd);
+      if (res && (res.success || res.data)) {
+        setImportSuccess(res.message || 'Orders imported successfully!');
+        setImportPreview(null);
+        setImportFile(null);
+        fetchOrders();
+        refreshRealtime();
+      } else {
+        setImportError('Import completed with errors.');
+      }
+    } catch (err) {
+      setImportError(err.response?.data?.message || 'Error executing order import.');
+    } finally {
+      setImportLoading(false);
     }
   };
 
@@ -96,7 +159,7 @@ export function OrdersPage() {
           <p className="text-xs text-slate-500 mt-1">Automatic order entry, WhatsApp confirmation & delivery fulfillment</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button onClick={fetchOrders} className="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-colors">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -114,6 +177,33 @@ export function OrdersPage() {
             <option value="delivered">Delivered</option>
             <option value="cancelled">Cancelled</option>
           </select>
+
+          {/* Export & Import side by side */}
+          <div className="flex items-center gap-2">
+            <a
+              href={adminApi.getOrderExportUrl({ status: selectedStatus })}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition-all shadow-xs"
+            >
+              <Download className="w-4 h-4 text-slate-500" />
+              <span>Export</span>
+            </a>
+
+            <button
+              onClick={() => {
+                setImportModalOpen(true);
+                setImportPreview(null);
+                setImportFile(null);
+                setImportSuccess(null);
+                setImportError(null);
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition-all shadow-xs"
+            >
+              <Upload className="w-4 h-4 text-slate-500" />
+              <span>Import</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -290,6 +380,174 @@ export function OrdersPage() {
               )}
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Orders Import Modal */}
+      {importModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl space-y-5 text-slate-900">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Import Customer Orders</h3>
+                  <p className="text-xs text-slate-500">Batch upload customer orders, external orders, or historical orders</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setImportModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Template Download Card */}
+            <div className="p-4 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold text-emerald-950">1. Download Order Import Template</p>
+                <p className="text-[11px] text-emerald-800 mt-0.5">
+                  Pre-formatted with sample columns: customer phone, address, items, quantities, and prices.
+                </p>
+              </div>
+              <a
+                href={adminApi.getOrderImportTemplateUrl()}
+                download="Baqqala_Orders_Import_Template.csv"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-extrabold rounded-xl shrink-0 shadow-xs transition-colors"
+              >
+                <Download className="w-4 h-4" /> Download Template
+              </a>
+            </div>
+
+            {/* Error & Success Messages */}
+            {importError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span>{importError}</span>
+              </div>
+            )}
+            {importSuccess && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                <span>{importSuccess}</span>
+              </div>
+            )}
+
+            {/* File Upload Form */}
+            <div className="space-y-3">
+              <label className="block text-xs font-bold text-slate-700">2. Select CSV or Excel File</label>
+              <div className="border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-2xl p-6 text-center cursor-pointer bg-slate-50 transition-colors relative">
+                <input
+                  type="file"
+                  accept=".csv, .xlsx, .xls"
+                  onChange={handleFileChange}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                />
+                <FileSpreadsheet className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                <p className="text-xs font-bold text-slate-700">
+                  {importFile ? importFile.name : 'Click to select or drop order spreadsheet here'}
+                </p>
+                <p className="text-[11px] text-slate-400 mt-1">Supports standard CSV or Excel exports</p>
+              </div>
+            </div>
+
+            {/* Preview Section */}
+            {importFile && !importPreview && (
+              <button
+                type="button"
+                onClick={handlePreviewImport}
+                disabled={importLoading}
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2"
+              >
+                {importLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+                Analyze & Preview File
+              </button>
+            )}
+
+            {/* Preview Summary */}
+            {importPreview && (
+              <div className="space-y-4 border-t border-slate-200 pt-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">Import Verification Summary</h4>
+                  <span className="text-xs font-bold text-emerald-700">Ready to Process</span>
+                </div>
+
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5">
+                    <div className="text-lg font-black text-slate-900">{importPreview.total_rows}</div>
+                    <div className="text-[10px] text-slate-500 font-bold uppercase">Total Rows</div>
+                  </div>
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5">
+                    <div className="text-lg font-black text-emerald-700">{importPreview.valid_count}</div>
+                    <div className="text-[10px] text-emerald-700 font-bold uppercase">Valid Rows</div>
+                  </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-2.5">
+                    <div className="text-lg font-black text-blue-700">{importPreview.new_customers_est}</div>
+                    <div className="text-[10px] text-blue-700 font-bold uppercase">New Customers</div>
+                  </div>
+                  <div className="bg-rose-50 border border-rose-200 rounded-xl p-2.5">
+                    <div className="text-lg font-black text-rose-700">{importPreview.errors_count}</div>
+                    <div className="text-[10px] text-rose-700 font-bold uppercase">Errors</div>
+                  </div>
+                </div>
+
+                {/* Sample Rows Table */}
+                <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-xl">
+                  <table className="w-full text-left text-[11px] text-slate-700">
+                    <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200 sticky top-0">
+                      <tr>
+                        <th className="p-2">Row</th>
+                        <th className="p-2">Customer / Phone</th>
+                        <th className="p-2">Item</th>
+                        <th className="p-2 text-right">Qty & Price</th>
+                        <th className="p-2 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {importPreview.rows?.map((r, i) => (
+                        <tr key={i} className="hover:bg-slate-50">
+                          <td className="p-2 font-mono text-slate-400 font-bold">#{r.row_number}</td>
+                          <td className="p-2 font-bold text-slate-900">
+                            <div>{r.customer_name}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">{r.customer_phone}</div>
+                          </td>
+                          <td className="p-2 text-slate-800 font-medium">{r.item_sku_or_name}</td>
+                          <td className="p-2 text-right font-mono font-bold text-slate-900">
+                            {r.item_quantity} &times; AED {parseFloat(r.item_price).toFixed(2)}
+                          </td>
+                          <td className="p-2 text-center">
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase ${
+                              r.status_code === 'VALID' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                            }`}>
+                              {r.status_code}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Execute Confirm Import Button */}
+                <button
+                  type="button"
+                  onClick={handleConfirmImport}
+                  disabled={importLoading || importPreview.valid_count === 0}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {importLoading ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="w-4 h-4" />
+                  )}
+                  <span>Confirm & Import {importPreview.valid_count} Valid Order Rows</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

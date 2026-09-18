@@ -19,6 +19,22 @@ class Category extends Model
         'status',
     ];
 
+    protected $appends = [
+        'image_url',
+    ];
+
+    public function getImageUrlAttribute(): ?string
+    {
+        $img = $this->attributes['image'] ?? null;
+        if (empty($img)) {
+            return null;
+        }
+        if (str_starts_with($img, 'http://') || str_starts_with($img, 'https://')) {
+            return $img;
+        }
+        return asset('storage/' . ltrim($img, '/'));
+    }
+
     public function products(): HasMany
     {
         return $this->hasMany(Product::class);

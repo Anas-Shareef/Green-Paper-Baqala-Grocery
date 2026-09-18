@@ -23,8 +23,12 @@ export const ProductCard = ({ product, cartQuantity = 0, onAddToCart, onUpdateQu
       {/* Product Image */}
       <div className="w-full h-32 rounded-xl overflow-hidden bg-slate-100 mb-2 relative">
         <img
-          src={product.image || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=300&q=80'}
+          src={product.image_url || product.image || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=300&q=80'}
           alt={product.name}
+          onError={(e) => {
+            e.target.onerror = null;
+            e.target.src = 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=300&q=80';
+          }}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           loading="lazy"
         />
@@ -46,7 +50,7 @@ export const ProductCard = ({ product, cartQuantity = 0, onAddToCart, onUpdateQu
       {/* Price & Cart Actions */}
       <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-100">
         <div className="font-black text-sm text-emerald-700 font-mono">
-          ₹{parseFloat(product.retail_price).toFixed(2)}
+          AED {parseFloat(product.retail_price).toFixed(2)}
         </div>
 
         {isOutOfStock ? (

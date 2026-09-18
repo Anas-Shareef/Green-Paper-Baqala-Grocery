@@ -67,8 +67,12 @@ export const HomePage = ({
               className="flex flex-col items-center gap-2 p-3 bg-white border border-slate-200/80 hover:border-emerald-500/50 rounded-2xl shrink-0 w-24 transition-all group shadow-xs hover:shadow-md"
             >
               <img
-                src={c.image || 'https://images.unsplash.com/photo-1610832958506-aa56368176cf?auto=format&fit=crop&w=150&q=80'}
+                src={c.image_url || c.image || 'https://images.unsplash.com/photo-1610832958506-aa56368176cf?auto=format&fit=crop&w=150&q=80'}
                 alt={c.name}
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = 'https://images.unsplash.com/photo-1610832958506-aa56368176cf?auto=format&fit=crop&w=150&q=80';
+                }}
                 className="w-12 h-12 rounded-xl object-cover group-hover:scale-110 transition-transform bg-slate-100"
               />
               <span className="text-[11px] font-bold text-slate-800 group-hover:text-emerald-700 text-center line-clamp-1">
