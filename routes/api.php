@@ -70,9 +70,18 @@ Route::prefix('v1')->group(function () {
         Route::put('/categories/{id}', [AdminCategoryController::class, 'update']);
         Route::delete('/categories/{id}', [AdminCategoryController::class, 'destroy']);
 
+        // Inventory Management & Stock Ledger Routes
         Route::get('/inventory', [AdminInventoryController::class, 'index']);
-        Route::post('/inventory/adjustments', [AdminInventoryController::class, 'adjustStock']);
+        Route::get('/inventory/summary', [AdminInventoryController::class, 'summary']);
         Route::get('/inventory/movements', [AdminInventoryController::class, 'movements']);
+        Route::get('/inventory/reorder', [AdminInventoryController::class, 'reorder']);
+        Route::get('/inventory/valuation', [AdminInventoryController::class, 'valuation']);
+        Route::get('/inventory/counts', [AdminInventoryController::class, 'listCounts']);
+        Route::post('/inventory/counts', [AdminInventoryController::class, 'startCount']);
+        Route::get('/inventory/counts/{id}', [AdminInventoryController::class, 'showCount']);
+        Route::post('/inventory/counts/{id}/approve', [AdminInventoryController::class, 'approveCount']);
+        Route::get('/inventory/{id}', [AdminInventoryController::class, 'show']);
+        Route::post('/inventory/adjustments', [AdminInventoryController::class, 'adjustStock']);
 
         Route::get('/orders', [AdminOrderController::class, 'index']);
         Route::get('/orders/export', [AdminOrderController::class, 'export']);

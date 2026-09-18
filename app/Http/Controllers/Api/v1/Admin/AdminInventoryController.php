@@ -4,46 +4,117 @@ namespace App\Http\Controllers\Api\v1\Admin;
 
 use App\Http\Controllers\Api\v1\BaseApiController;
 use App\Models\Product;
+use App\Models\StockCount;
 use App\Models\StockMovement;
+use App\Services\InventoryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Validator;
 
 class AdminInventoryController extends BaseApiController
 {
     /**
-     * Get Inventory Summary and Stock Movements
+     * Get Paginated Inventory List with Filters
      */
     public function index(Request $request): JsonResponse
     {
-        $products = Product::with('category')
-            ->orderBy('stock_quantity', 'asc')
-            ->get();
+        $query = Product::with('category:id,name,slug')->where('status', 'active');
 
-        $recentMovements = StockMovement::with('product')
-            ->orderBy('id', 'desc')
-            ->take(30)
-            ->get();
+        if ($request->has('q') && !empty(trim($request->input('q')))) {
+            $term = trim($request->input('q'));
+            $query->where(function ($q) use ($term) {
+                $q->where('name', 'like', "%{$term}%")
+                    ->orWhere('barcode', 'like', "%{$term}%")
+                    ->orWhere('sku', 'like', "%{$term}%")
+                    ->orWhere('brand', 'like', "%{$term}%");
+            });
+        }
 
-        return $this->successResponse([
-            'products' => $products,
-            'recent_movements' => $recentMovements,
-            'low_stock_count' => Product::whereColumn('stock_quantity', '<=', 'minimum_stock_level')->count(),
-            'out_of_stock_count' => Product::where('stock_quantity', '<=', 0)->count(),
-        ], 'Inventory data retrieved successfully');
+        if ($request->has('category_id') && !empty($request->input('category_id'))) {
+            $query->where('category_id', $request->input('category_id'));
+        }
+
+        $stockFilter = $request->input('status');
+        if ($stockFilter === 'low_stock') {
+            $query->whereRaw('(stock_quantity - reserved_quantity) <= minimum_stock_level AND (stock_quantity - reserved_quantity) > 0');
+        } elseif ($stockFilter === 'out_of_stock') {
+            $query->whereRaw('(stock_quantity - reserved_quantity) <= 0');
+        } elseif ($stockFilter === 'in_stock') {
+            $query->whereRaw('(stock_quantity - reserved_quantity) > minimum_stock_level');
+        } elseif ($stockFilter === 'negative') {
+            $query->where('stock_quantity', '<', 0);
+        }
+
+        $perPage = min((int) $request->input('per_page', 25), 100);
+        $products = $query->orderByRaw('(stock_quantity - reserved_quantity) ASC')->paginate($perPage);
+
+        $mapped = $products->through(function ($p) {
+            $available = max(0, $p->stock_quantity - $p->reserved_quantity);
+            $status = $p->stock_quantity < 0 ? 'negative' : ($available <= 0 ? 'out_of_stock' : ($available <= $p->minimum_stock_level ? 'low_stock' : 'in_stock'));
+
+            return [
+                'id' => $p->id,
+                'name' => $p->name,
+                'sku' => $p->sku,
+                'barcode' => $p->barcode,
+                'brand' => $p->brand,
+                'unit' => $p->unit,
+                'category' => $p->category?->name,
+                'wholesale_cost' => (float) $p->wholesale_cost,
+                'retail_price' => (float) $p->retail_price,
+                'stock_quantity' => $p->stock_quantity,
+                'reserved_quantity' => $p->reserved_quantity,
+                'available_quantity' => $available,
+                'minimum_stock_level' => $p->minimum_stock_level,
+                'maximum_stock_level' => $p->maximum_stock_level,
+                'expiry_date' => $p->expiry_date ? $p->expiry_date->toDateString() : null,
+                'supplier_name' => $p->supplier_name,
+                'status' => $status,
+            ];
+        });
+
+        return $this->paginatedResponse($mapped, 'Inventory products retrieved successfully');
     }
 
     /**
-     * Adjust Product Stock Level (Record Stock Movement in DB Transaction)
+     * Get Inventory Summary KPIs & Valuation
      */
-    public function adjustStock(Request $request): JsonResponse
+    public function summary(InventoryService $inventoryService): JsonResponse
+    {
+        $kpis = $inventoryService->getInventoryKPIs();
+        return $this->successResponse($kpis, 'Inventory summary KPIs retrieved successfully');
+    }
+
+    /**
+     * Show Single Product Inventory Breakdown & Movements
+     */
+    public function show(int $id): JsonResponse
+    {
+        $product = Product::with(['category', 'stockMovements' => function ($q) {
+            $q->orderBy('id', 'desc')->limit(20);
+        }])->findOrFail($id);
+
+        $available = max(0, $product->stock_quantity - $product->reserved_quantity);
+
+        return $this->successResponse([
+            'product' => $product,
+            'available_quantity' => $available,
+            'movements' => $product->stockMovements,
+        ], 'Product inventory details retrieved successfully');
+    }
+
+    /**
+     * Adjust Product Stock Level
+     */
+    public function adjustStock(Request $request, InventoryService $inventoryService): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'product_id' => 'required|exists:products,id',
-            'type' => 'required|in:purchase,sale,adjustment,damage,return',
-            'quantity' => 'required|integer',
-            'reason' => 'nullable|string',
+            'quantity' => 'required|integer|min:0', // target new stock quantity
+            'type' => 'required|string|in:Damage,Expiry,Correction,Lost,Found,Manual Adjustment',
+            'reason' => 'required|string|min:3',
+            'notes' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -51,26 +122,17 @@ class AdminInventoryController extends BaseApiController
         }
 
         try {
-            $movement = DB::transaction(function () use ($request) {
-                $product = Product::lockForUpdate()->findOrFail($request->input('product_id'));
-                $prevQty = $product->stock_quantity;
-                $changeQty = (int) $request->input('quantity');
+            $product = $inventoryService->adjustStock(
+                (int) $request->input('product_id'),
+                (int) $request->input('quantity'),
+                $request->input('reason'),
+                $request->input('type'),
+                $request->user()?->name ?? 'Admin API',
+                $request->input('notes')
+            );
 
-                $newQty = max(0, $prevQty + $changeQty);
-                $product->update(['stock_quantity' => $newQty]);
-
-                return StockMovement::create([
-                    'product_id' => $product->id,
-                    'type' => $request->input('type'),
-                    'quantity' => $changeQty,
-                    'previous_quantity' => $prevQty,
-                    'new_quantity' => $newQty,
-                    'reason' => $request->input('reason', 'Manual Stock Adjustment'),
-                ]);
-            });
-
-            return $this->successResponse($movement->load('product'), 'Stock adjusted successfully');
-        } catch (\Exception $e) {
+            return $this->successResponse($product, 'Stock adjusted and ledger movement recorded successfully');
+        } catch (\Throwable $e) {
             return $this->errorResponse($e->getMessage(), [], 400);
         }
     }
@@ -80,7 +142,7 @@ class AdminInventoryController extends BaseApiController
      */
     public function movements(Request $request): JsonResponse
     {
-        $query = StockMovement::with('product');
+        $query = StockMovement::with('product:id,name,barcode');
 
         if ($request->has('product_id')) {
             $query->where('product_id', $request->input('product_id'));
@@ -90,8 +152,92 @@ class AdminInventoryController extends BaseApiController
             $query->where('type', $request->input('type'));
         }
 
-        $movements = $query->orderBy('id', 'desc')->paginate(30);
+        $perPage = min((int) $request->input('per_page', 30), 100);
+        $movements = $query->orderBy('id', 'desc')->paginate($perPage);
 
         return $this->paginatedResponse($movements, 'Stock movements retrieved successfully');
+    }
+
+    /**
+     * Get Reorder Recommendations
+     */
+    public function reorder(InventoryService $inventoryService): JsonResponse
+    {
+        $recommendations = $inventoryService->getReorderRecommendations(50);
+        return $this->successResponse($recommendations, 'Reorder recommendations retrieved successfully');
+    }
+
+    /**
+     * Get Valuation by Category
+     */
+    public function valuation(InventoryService $inventoryService): JsonResponse
+    {
+        $valuation = $inventoryService->getValuationByCategory();
+        return $this->successResponse($valuation, 'Category inventory valuation retrieved successfully');
+    }
+
+    /**
+     * List Stock Count Sessions
+     */
+    public function listCounts(): JsonResponse
+    {
+        $counts = StockCount::with('category:id,name')
+            ->orderBy('id', 'desc')
+            ->paginate(20);
+
+        return $this->paginatedResponse($counts, 'Stock counts retrieved successfully');
+    }
+
+    /**
+     * Start New Stock Count Session
+     */
+    public function startCount(Request $request, InventoryService $inventoryService): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'category_id' => 'nullable|exists:categories,id',
+            'notes' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->errorResponse('Validation failed', $validator->errors(), 422);
+        }
+
+        try {
+            $count = $inventoryService->startStockCount(
+                $request->input('category_id'),
+                $request->input('notes'),
+                $request->user()?->name ?? 'Admin API'
+            );
+
+            return $this->successResponse($count, 'Stock count session initialized successfully', 201);
+        } catch (\Throwable $e) {
+            return $this->errorResponse($e->getMessage(), [], 400);
+        }
+    }
+
+    /**
+     * Show Stock Count Session with Items
+     */
+    public function showCount(int $id): JsonResponse
+    {
+        $count = StockCount::with(['category', 'items.product'])->findOrFail($id);
+        return $this->successResponse($count, 'Stock count session details retrieved successfully');
+    }
+
+    /**
+     * Approve Stock Count Session
+     */
+    public function approveCount(int $id, Request $request, InventoryService $inventoryService): JsonResponse
+    {
+        try {
+            $count = $inventoryService->approveStockCount(
+                $id,
+                $request->user()?->name ?? 'Admin API'
+            );
+
+            return $this->successResponse($count, 'Stock count session approved and variances applied to ledger');
+        } catch (\Throwable $e) {
+            return $this->errorResponse($e->getMessage(), [], 400);
+        }
     }
 }

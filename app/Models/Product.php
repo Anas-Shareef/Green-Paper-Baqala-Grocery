@@ -25,6 +25,8 @@ class Product extends Model
         'reserved_quantity',
         'minimum_stock_level',
         'maximum_stock_level',
+        'expiry_date',
+        'supplier_name',
         'image',
         'description',
         'status',
@@ -41,6 +43,7 @@ class Product extends Model
         'reserved_quantity' => 'integer',
         'minimum_stock_level' => 'integer',
         'maximum_stock_level' => 'integer',
+        'expiry_date' => 'date',
     ];
 
     public function category(): BelongsTo
