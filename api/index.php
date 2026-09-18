@@ -17,6 +17,7 @@ try {
     }
 
     // Redirect framework cache paths to /tmp to bypass read-only bootstrap/cache files
+    // Preserving compiled caches across warm invocations significantly reduces bootstrap latency
     $cachePaths = [
         'APP_SERVICES_CACHE' => '/tmp/services.php',
         'APP_PACKAGES_CACHE' => '/tmp/packages.php',
@@ -28,9 +29,6 @@ try {
         putenv("{$key}={$path}");
         $_ENV[$key] = $path;
         $_SERVER[$key] = $path;
-        if (file_exists($path)) {
-            @unlink($path);
-        }
     }
 
     // Propagate all database environment variables from Vercel environment
@@ -49,15 +47,18 @@ try {
     $dbHost = getenv('DB_HOST') ?: ($_ENV['DB_HOST'] ?? '');
 
     $isPgsql = ($dbDriver === 'pgsql' || !empty($dbHost));
+    $requestUri = $_SERVER['REQUEST_URI'] ?? '';
+    $isApi = str_starts_with($requestUri, '/api');
 
-    // Mandatory Environment Variables for Vercel serverless execution
+    // Production Environment Variables for fast Vercel serverless execution
     $forcedEnv = [
         'APP_STORAGE' => $tmpStorage,
+        'APP_ENV' => getenv('APP_ENV') ?: 'production',
+        'APP_DEBUG' => getenv('APP_DEBUG') ?: 'false',
         'LOG_CHANNEL' => 'stderr',
         'VIEW_COMPILED_PATH' => $tmpStorage . '/framework/views',
-        'APP_DEBUG' => 'true',
-        'SESSION_DRIVER' => 'cookie',
-        'CACHE_STORE' => 'array',
+        'SESSION_DRIVER' => $isApi ? 'array' : (getenv('SESSION_DRIVER') ?: 'cookie'),
+        'CACHE_STORE' => getenv('CACHE_STORE') ?: 'file',
         'QUEUE_CONNECTION' => 'sync',
         'FILESYSTEM_DISK' => 'local',
         'MAIL_MAILER' => 'log',

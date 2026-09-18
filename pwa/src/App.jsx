@@ -15,9 +15,31 @@ import { api } from './services/api';
 
 export function App() {
   const [activeTab, setActiveTab] = useState('home'); // home, catalog, checkout, tracking, profile
-  const [homeData, setHomeData] = useState(null);
-  const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
+  // Instant 0ms perceived load via LocalStorage Cache (Stale-While-Revalidate)
+  const [homeData, setHomeData] = useState(() => {
+    try {
+      const saved = localStorage.getItem('baqqala_home_cache');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+  const [categories, setCategories] = useState(() => {
+    try {
+      const saved = localStorage.getItem('baqqala_home_cache');
+      return saved ? (JSON.parse(saved).categories || []) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [products, setProducts] = useState(() => {
+    try {
+      const saved = localStorage.getItem('baqqala_home_cache');
+      return saved ? (JSON.parse(saved).featured_products || []) : [];
+    } catch (e) {
+      return [];
+    }
+  });
   
   // Persistent Cart in LocalStorage
   const [cart, setCart] = useState(() => {
@@ -51,14 +73,19 @@ export function App() {
     }
   }, [cart]);
 
+  // Background fresh data revalidation
   useEffect(() => {
+    let isMounted = true;
     api.getHome().then((data) => {
-      if (data) {
+      if (data && isMounted) {
         setHomeData(data);
         setCategories(data.categories || []);
         setProducts(data.featured_products || []);
       }
     });
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleSearch = (q) => {

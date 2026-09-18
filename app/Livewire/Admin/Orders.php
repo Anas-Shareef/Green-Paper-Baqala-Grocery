@@ -141,11 +141,9 @@ class Orders extends Component
         $this->viewingOrderId = $id;
         $this->loadViewingOrder();
 
-        // Calculate Prev / Next IDs in current view
-        $allIds = $this->getBaseQuery()->pluck('id')->toArray();
-        $currentIndex = array_search($id, $allIds);
-        $this->prevOrderId = ($currentIndex !== false && isset($allIds[$currentIndex - 1])) ? $allIds[$currentIndex - 1] : null;
-        $this->nextOrderId = ($currentIndex !== false && isset($allIds[$currentIndex + 1])) ? $allIds[$currentIndex + 1] : null;
+        // Calculate Prev / Next IDs efficiently using indexed queries
+        $this->prevOrderId = Order::where('id', '>', $id)->orderBy('id', 'asc')->value('id');
+        $this->nextOrderId = Order::where('id', '<', $id)->orderBy('id', 'desc')->value('id');
 
         $this->showDrawer = true;
     }
@@ -590,7 +588,7 @@ class Orders extends Component
         } elseif ($this->smartFilter === 'ready_to_deliver') {
             $query->where('status', 'ready');
         } elseif ($this->smartFilter === 'today') {
-            $query->whereDate('created_at', now()->toDateString());
+            $query->whereBetween('created_at', [now()->startOfDay(), now()->endOfDay()]);
         }
 
         // Payment Filter
@@ -620,15 +618,16 @@ class Orders extends Component
             });
         }
 
-        // Date Range Filter
+        // Date Range Filter (Index-Friendly Timestamp Ranges)
         if ($this->filterDate === 'today') {
-            $query->whereDate('created_at', now()->toDateString());
+            $query->whereBetween('created_at', [now()->startOfDay(), now()->endOfDay()]);
         } elseif ($this->filterDate === 'yesterday') {
-            $query->whereDate('created_at', now()->subDay()->toDateString());
+            $yesterday = now()->subDay();
+            $query->whereBetween('created_at', [$yesterday->startOfDay(), $yesterday->endOfDay()]);
         } elseif ($this->filterDate === 'last7') {
-            $query->where('created_at', '>=', now()->subDays(7));
+            $query->where('created_at', '>=', now()->subDays(7)->startOfDay());
         } elseif ($this->filterDate === 'month') {
-            $query->whereMonth('created_at', now()->month)->whereYear('created_at', now()->year);
+            $query->whereBetween('created_at', [now()->startOfMonth(), now()->endOfMonth()]);
         }
 
         // Search
@@ -679,31 +678,33 @@ class Orders extends Component
 
     public function render()
     {
-        // 1. Calculate Real-Time Operational KPIs
-        $kpiNew = Order::whereIn('status', ['awaiting_whatsapp', 'pending'])->count();
-        $kpiAwaiting = Order::where('status', 'awaiting_whatsapp')->count();
-        $kpiPreparing = Order::where('status', 'preparing')->count();
-        $kpiReady = Order::where('status', 'ready')->count();
-        $kpiOutForDelivery = Order::where('status', 'out_for_delivery')->count();
-
-        $kpiCodOutstanding = (float) Order::whereIn('status', ['awaiting_whatsapp', 'pending', 'confirmed', 'accepted', 'preparing', 'ready', 'out_for_delivery'])
-            ->where('payment_status', 'pending')
-            ->sum('total_amount');
-
-        $kpiLate = Order::whereIn('status', ['awaiting_whatsapp', 'pending', 'confirmed', 'accepted', 'preparing', 'ready', 'out_for_delivery'])
-            ->where('created_at', '<', now()->subMinutes(45))
-            ->count();
+        // 1. Consolidated Operational KPIs in a SINGLE SQL query (7x reduction in DB roundtrips)
+        $slaThreshold = now()->subMinutes(45);
+        $kpiRow = \Illuminate\Support\Facades\DB::table('orders')->selectRaw("
+            COUNT(CASE WHEN status IN ('awaiting_whatsapp', 'pending') THEN 1 END) as kpi_new,
+            COUNT(CASE WHEN status = 'awaiting_whatsapp' THEN 1 END) as kpi_awaiting,
+            COUNT(CASE WHEN status = 'preparing' THEN 1 END) as kpi_preparing,
+            COUNT(CASE WHEN status = 'ready' THEN 1 END) as kpi_ready,
+            COUNT(CASE WHEN status = 'out_for_delivery' THEN 1 END) as kpi_out_for_delivery,
+            COALESCE(SUM(CASE WHEN status IN ('awaiting_whatsapp', 'pending', 'confirmed', 'accepted', 'preparing', 'ready', 'out_for_delivery') AND payment_status = 'pending' THEN total_amount ELSE 0 END), 0) as kpi_cod_outstanding,
+            COUNT(CASE WHEN status IN ('awaiting_whatsapp', 'pending', 'confirmed', 'accepted', 'preparing', 'ready', 'out_for_delivery') AND created_at < ? THEN 1 END) as kpi_late
+        ", [$slaThreshold])->first();
 
         // 2. Fetch Paginated Orders for Table View
         $orders = $this->getBaseQuery()->paginate(25);
 
-        // 3. For Kanban Board View, fetch active orders grouped by pipeline
+        // 3. For Kanban Board View, fetch only recent active orders with targeted fields
         $boardOrders = [];
         if ($this->viewMode === 'board') {
-            $activeList = Order::with(['customer', 'deliveryStaff', 'items'])
-                ->whereIn('status', ['awaiting_whatsapp', 'pending', 'confirmed', 'accepted', 'preparing', 'ready', 'out_for_delivery'])
-                ->orderBy('id', 'desc')
-                ->get();
+            $activeList = Order::with([
+                'customer:id,name,phone,villa_number,zone',
+                'deliveryStaff:id,name,role',
+                'items:id,order_id,product_name,quantity,unit_price,total'
+            ])
+            ->whereIn('status', ['awaiting_whatsapp', 'pending', 'confirmed', 'accepted', 'preparing', 'ready', 'out_for_delivery'])
+            ->orderBy('id', 'desc')
+            ->limit(60)
+            ->get();
 
             $boardOrders = [
                 'awaiting' => $activeList->whereIn('status', ['awaiting_whatsapp', 'pending']),
@@ -715,20 +716,20 @@ class Orders extends Component
         }
 
         // 4. Delivery Drivers List
-        $deliveryDrivers = User::whereIn('role', ['delivery', 'staff', 'admin', 'super_admin'])->get();
+        $deliveryDrivers = User::whereIn('role', ['delivery', 'staff', 'admin', 'super_admin'])->get(['id', 'name', 'role']);
 
         return view('livewire.admin.orders', [
             'orders' => $orders,
             'boardOrders' => $boardOrders,
             'deliveryDrivers' => $deliveryDrivers,
             'kpis' => [
-                'new' => $kpiNew,
-                'awaiting' => $kpiAwaiting,
-                'preparing' => $kpiPreparing,
-                'ready' => $kpiReady,
-                'out_for_delivery' => $kpiOutForDelivery,
-                'cod_outstanding' => $kpiCodOutstanding,
-                'late' => $kpiLate,
+                'new' => (int) ($kpiRow->kpi_new ?? 0),
+                'awaiting' => (int) ($kpiRow->kpi_awaiting ?? 0),
+                'preparing' => (int) ($kpiRow->kpi_preparing ?? 0),
+                'ready' => (int) ($kpiRow->kpi_ready ?? 0),
+                'out_for_delivery' => (int) ($kpiRow->kpi_out_for_delivery ?? 0),
+                'cod_outstanding' => (float) ($kpiRow->kpi_cod_outstanding ?? 0.00),
+                'late' => (int) ($kpiRow->kpi_late ?? 0),
             ],
         ])->layout('components.layouts.app', ['title' => 'Baqqala — Order Management & Fulfillment Control Center']);
     }

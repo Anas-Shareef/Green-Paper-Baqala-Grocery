@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\Product;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class ProductController extends BaseApiController
 {
@@ -14,20 +15,27 @@ class ProductController extends BaseApiController
      */
     public function home(): JsonResponse
     {
-        $categories = Category::where('status', 'active')
-            ->orderBy('sort_order', 'asc')
-            ->get();
+        $cacheKey = 'storefront_home_feed_v1';
+        $data = Cache::remember($cacheKey, 60, function () {
+            $categories = Category::where('status', 'active')
+                ->select('id', 'name', 'slug', 'image', 'sort_order')
+                ->orderBy('sort_order', 'asc')
+                ->get();
 
-        $featuredProducts = Product::where('status', 'active')
-            ->with('category')
-            ->orderBy('id', 'desc')
-            ->take(12)
-            ->get();
+            $featuredProducts = Product::where('status', 'active')
+                ->select('id', 'category_id', 'barcode', 'sku', 'name', 'brand', 'unit', 'retail_price', 'stock_quantity', 'image')
+                ->with('category:id,name,slug')
+                ->orderBy('id', 'desc')
+                ->take(12)
+                ->get();
 
-        return $this->successResponse([
-            'categories' => $categories,
-            'featured_products' => $featuredProducts,
-        ], 'Home feed retrieved successfully');
+            return [
+                'categories' => $categories,
+                'featured_products' => $featuredProducts,
+            ];
+        });
+
+        return $this->successResponse($data, 'Home feed retrieved successfully');
     }
 
     /**
@@ -35,7 +43,9 @@ class ProductController extends BaseApiController
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Product::where('status', 'active')->with('category');
+        $query = Product::where('status', 'active')
+            ->select('id', 'category_id', 'barcode', 'sku', 'name', 'brand', 'unit', 'retail_price', 'stock_quantity', 'image')
+            ->with('category:id,name,slug');
 
         if ($request->has('category_id') && !empty($request->input('category_id'))) {
             $query->where('category_id', $request->input('category_id'));
@@ -53,7 +63,7 @@ class ProductController extends BaseApiController
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
                   ->orWhere('sku', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%");
+                  ->orWhere('barcode', 'like', "%{$search}%");
             });
         }
 
@@ -74,12 +84,13 @@ class ProductController extends BaseApiController
         }
 
         $products = Product::where('status', 'active')
+            ->select('id', 'category_id', 'barcode', 'sku', 'name', 'brand', 'unit', 'retail_price', 'stock_quantity', 'image')
             ->where(function ($query) use ($q) {
                 $query->where('name', 'like', "%{$q}%")
                       ->orWhere('sku', 'like', "%{$q}%")
-                      ->orWhere('description', 'like', "%{$q}%");
+                      ->orWhere('barcode', 'like', "%{$q}%");
             })
-            ->with('category')
+            ->with('category:id,name,slug')
             ->take(20)
             ->get();
 
@@ -93,7 +104,7 @@ class ProductController extends BaseApiController
     {
         $product = Product::where('status', 'active')
             ->where(function ($q) use ($id) {
-                $q->where('id', $id)->orWhere('sku', $id);
+                $q->where('id', $id)->orWhere('sku', $id)->orWhere('barcode', $id);
             })
             ->with('category')
             ->first();
@@ -110,9 +121,12 @@ class ProductController extends BaseApiController
      */
     public function categories(): JsonResponse
     {
-        $categories = Category::where('status', 'active')
-            ->orderBy('sort_order', 'asc')
-            ->get();
+        $categories = Cache::remember('storefront_categories_v1', 120, function () {
+            return Category::where('status', 'active')
+                ->select('id', 'name', 'slug', 'image', 'sort_order')
+                ->orderBy('sort_order', 'asc')
+                ->get();
+        });
 
         return $this->successResponse($categories, 'Categories retrieved successfully');
     }

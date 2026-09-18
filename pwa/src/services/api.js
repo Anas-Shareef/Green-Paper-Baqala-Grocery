@@ -24,21 +24,42 @@ const client = axios.create({
   },
 });
 
+const memCache = new Map();
+
 export const api = {
   getHome: async () => {
     try {
       const res = await client.get(getApiUrl('/home'));
-      return res.data?.data || res.data;
+      const data = res.data?.data || res.data;
+      if (data) {
+        try {
+          localStorage.setItem('baqqala_home_cache', JSON.stringify(data));
+        } catch (_) {}
+      }
+      return data;
     } catch (e) {
-      console.error(e);
+      console.error('getHome error, attempting local cache fallback:', e);
+      try {
+        const saved = localStorage.getItem('baqqala_home_cache');
+        if (saved) return JSON.parse(saved);
+      } catch (_) {}
       return null;
     }
   },
 
   getProducts: async (params = {}) => {
+    const key = `products_${JSON.stringify(params)}`;
+    if (memCache.has(key)) {
+      const entry = memCache.get(key);
+      if (Date.now() - entry.time < 60000) {
+        return entry.data;
+      }
+    }
     try {
       const res = await client.get(getApiUrl('/products'), { params });
-      return res.data?.data || res.data;
+      const data = res.data?.data || res.data;
+      memCache.set(key, { data, time: Date.now() });
+      return data;
     } catch (e) {
       console.error(e);
       return { data: [] };
@@ -46,9 +67,18 @@ export const api = {
   },
 
   searchProducts: async (q) => {
+    const key = `search_${q.toLowerCase().trim()}`;
+    if (memCache.has(key)) {
+      const entry = memCache.get(key);
+      if (Date.now() - entry.time < 30000) {
+        return entry.data;
+      }
+    }
     try {
       const res = await client.get(getApiUrl('/products/search'), { params: { q } });
-      return res.data?.data || res.data;
+      const data = res.data?.data || res.data;
+      memCache.set(key, { data, time: Date.now() });
+      return data;
     } catch (e) {
       console.error(e);
       return [];

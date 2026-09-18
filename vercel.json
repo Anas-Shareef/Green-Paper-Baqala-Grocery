@@ -10,6 +10,8 @@
   "rewrites": [
     { "source": "/favicon.ico", "destination": "/favicon.ico" },
     { "source": "/robots.txt", "destination": "/robots.txt" },
+    { "source": "/build/(.*)", "destination": "/build/$1" },
+    { "source": "/assets/(.*)", "destination": "/assets/$1" },
     { "source": "/api/(.*)", "destination": "/api/index.php" },
     { "source": "/(.*)", "destination": "/api/index.php" }
   ],
@@ -18,7 +20,7 @@
     "APP_ENV": "production",
     "APP_DEBUG": "false",
     "VIEW_COMPILED_PATH": "/tmp/storage/framework/views",
-    "CACHE_STORE": "array",
+    "CACHE_STORE": "file",
     "LOG_CHANNEL": "stderr",
     "SESSION_DRIVER": "array"
   }
