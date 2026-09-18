@@ -75,8 +75,21 @@ Route::prefix('v1')->group(function () {
         Route::get('/inventory/movements', [AdminInventoryController::class, 'movements']);
 
         Route::get('/orders', [AdminOrderController::class, 'index']);
+        Route::get('/orders/export', [AdminOrderController::class, 'export']);
+        Route::post('/orders/bulk-action', [AdminOrderController::class, 'bulkAction']);
         Route::get('/orders/{id}', [AdminOrderController::class, 'show']);
         Route::put('/orders/{id}/status', [AdminOrderController::class, 'updateStatus']);
+        Route::post('/orders/{id}/confirm', [AdminOrderController::class, 'confirm']);
+        Route::post('/orders/{id}/prepare', [AdminOrderController::class, 'prepare']);
+        Route::post('/orders/{id}/ready', [AdminOrderController::class, 'ready']);
+        Route::post('/orders/{id}/assign-driver', [AdminOrderController::class, 'assignDriver']);
+        Route::post('/orders/{id}/dispatch', [AdminOrderController::class, 'dispatch']);
+        Route::post('/orders/{id}/deliver', [AdminOrderController::class, 'deliver']);
+        Route::post('/orders/{id}/payment', [AdminOrderController::class, 'payment']);
+        Route::post('/orders/{id}/fail-delivery', [AdminOrderController::class, 'failDelivery']);
+        Route::post('/orders/{id}/cancel', [AdminOrderController::class, 'cancel']);
+        Route::post('/orders/{id}/pick-item', [AdminOrderController::class, 'pickItem']);
+        Route::get('/orders/{id}/activity', [AdminOrderController::class, 'activity']);
 
         Route::get('/customers', [AdminCustomerController::class, 'index']);
         Route::get('/customers/{id}', [AdminCustomerController::class, 'show']);

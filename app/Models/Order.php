@@ -36,6 +36,17 @@ class Order extends Model
         'order_source',
         'delivery_staff_id',
         'notes',
+        'ready_at',
+        'failed_delivery_at',
+        'failed_delivery_reason',
+        'cod_collected_at',
+        'cod_collected_by',
+        'cod_collected_amount',
+        'cod_difference_reason',
+        'priority',
+        'internal_notes',
+        'delivery_notes',
+        'picking_status',
         'accepted_at',
         'preparing_at',
         'out_for_delivery_at',
@@ -53,11 +64,15 @@ class Order extends Model
         'product_cost' => 'decimal:2',
         'gross_profit' => 'decimal:2',
         'net_profit' => 'decimal:2',
+        'cod_collected_amount' => 'decimal:2',
         'accepted_at' => 'datetime',
         'preparing_at' => 'datetime',
+        'ready_at' => 'datetime',
         'out_for_delivery_at' => 'datetime',
         'delivered_at' => 'datetime',
+        'failed_delivery_at' => 'datetime',
         'cancelled_at' => 'datetime',
+        'cod_collected_at' => 'datetime',
     ];
 
     public function customer(): BelongsTo
@@ -75,6 +90,16 @@ class Order extends Model
         return $this->hasMany(OrderItem::class);
     }
 
+    public function activities(): HasMany
+    {
+        return $this->hasMany(OrderActivity::class)->orderBy('id', 'desc');
+    }
+
+    public function statusHistory(): HasMany
+    {
+        return $this->hasMany(OrderStatusHistory::class)->orderBy('id', 'desc');
+    }
+
     public function whatsappMessages(): HasMany
     {
         return $this->hasMany(WhatsAppMessage::class);
@@ -87,4 +112,72 @@ class Order extends Model
     {
         return (float) ($this->attributes['total_amount'] ?? 0.00);
     }
+
+    /**
+     * Operational Helpers & SLA Indicators
+     */
+    public function isAwaitingWhatsApp(): bool
+    {
+        return in_array($this->status, ['awaiting_whatsapp', 'pending']) && $this->order_source === 'PWA';
+    }
+
+    public function isTerminal(): bool
+    {
+        return in_array($this->status, ['delivered', 'cancelled', 'expired', 'returned', 'refunded']);
+    }
+
+    public function getElapsedMinutes(): int
+    {
+        return (int) round($this->created_at->diffInMinutes(now()));
+    }
+
+    public function isLate(int $slaMinutes = 45): bool
+    {
+        if ($this->isTerminal()) {
+            return false;
+        }
+        return $this->getElapsedMinutes() > $slaMinutes;
+    }
+
+    public function getNextAction(): array
+    {
+        return match ($this->status) {
+            'awaiting_whatsapp', 'pending' => [
+                'action' => 'confirm',
+                'label' => 'Confirm Order',
+                'color' => 'emerald',
+            ],
+            'confirmed', 'accepted' => [
+                'action' => 'prepare',
+                'label' => 'Start Preparing',
+                'color' => 'blue',
+            ],
+            'preparing' => [
+                'action' => 'ready',
+                'label' => 'Mark Ready',
+                'color' => 'indigo',
+            ],
+            'ready' => [
+                'action' => 'dispatch',
+                'label' => $this->delivery_staff_id ? 'Mark Out for Delivery' : 'Assign Driver & Dispatch',
+                'color' => 'purple',
+            ],
+            'out_for_delivery' => [
+                'action' => 'deliver',
+                'label' => 'Mark Delivered & Collect COD',
+                'color' => 'emerald',
+            ],
+            'failed_delivery' => [
+                'action' => 'retry',
+                'label' => 'Retry Delivery',
+                'color' => 'amber',
+            ],
+            default => [
+                'action' => 'view',
+                'label' => 'View Details',
+                'color' => 'slate',
+            ],
+        };
+    }
 }
+

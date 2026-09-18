@@ -15,6 +15,8 @@ class OrderItem extends Model
         'product_id',
         'product_name',
         'quantity',
+        'picked_quantity',
+        'item_status',
         'unit_price',
         'wholesale_cost',
         'total',
@@ -25,6 +27,7 @@ class OrderItem extends Model
         'wholesale_cost' => 'decimal:2',
         'total' => 'decimal:2',
         'quantity' => 'integer',
+        'picked_quantity' => 'integer',
     ];
 
     public function order(): BelongsTo

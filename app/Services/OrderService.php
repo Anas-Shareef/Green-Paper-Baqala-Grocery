@@ -5,7 +5,9 @@ namespace App\Services;
 use App\Models\BusinessSetting;
 use App\Models\Customer;
 use App\Models\Order;
+use App\Models\OrderActivity;
 use App\Models\OrderItem;
+use App\Models\OrderStatusHistory;
 use App\Models\Product;
 use App\Models\StockMovement;
 use App\Models\User;
@@ -77,7 +79,7 @@ class OrderService
             $deliveryCharge = 0.00;
 
             if ($source === 'PWA' && $subtotal < $mov) {
-                throw new \Exception("Minimum order value is ₹{$mov}. Please add more items to your cart.");
+                throw new \Exception("Minimum order value is AED {$mov}. Please add more items to your cart.");
             }
 
             $discountAmount = (float) ($options['discount_amount'] ?? 0.00);
@@ -150,67 +152,248 @@ class OrderService
                 ]);
             }
 
+            $this->logActivity($order, 'order_created', "Order #{$order->order_number} created via {$source}");
+
             return $order;
         });
     }
 
+    /**
+     * 1. Confirm Order (Awaiting WhatsApp / Pending -> Confirmed)
+     */
+    public function confirmOrder(Order $order, ?User $actor = null): Order
+    {
+        return DB::transaction(function () use ($order, $actor) {
+            $fromStatus = $order->status;
+            $order->update([
+                'status' => 'confirmed',
+                'accepted_at' => now(),
+            ]);
+
+            $this->logStatusChange($order, $fromStatus, 'confirmed', 'Order accepted and confirmed', $actor);
+            $this->logActivity($order, 'order_confirmed', "Order #{$order->order_number} confirmed by " . ($actor?->name ?? 'Admin'), null, $actor);
+
+            return $order;
+        });
+    }
+
+    /** Backward-compatible alias */
     public function acceptOrder(Order $order): Order
     {
-        $order->update([
-            'status' => 'accepted',
-            'accepted_at' => now(),
-        ]);
-
-        return $order;
+        return $this->confirmOrder($order, auth()->user());
     }
 
+    /**
+     * 2. Start Preparing / Picking
+     */
+    public function startPreparing(Order $order, ?User $actor = null): Order
+    {
+        return DB::transaction(function () use ($order, $actor) {
+            $fromStatus = $order->status;
+            $order->update([
+                'status' => 'preparing',
+                'preparing_at' => now(),
+                'picking_status' => 'in_progress',
+            ]);
+
+            $this->logStatusChange($order, $fromStatus, 'preparing', 'Staff started picking & preparing', $actor);
+            $this->logActivity($order, 'picking_started', "Grocery preparation started by " . ($actor?->name ?? 'Staff'), null, $actor);
+
+            return $order;
+        });
+    }
+
+    /** Backward-compatible alias */
     public function prepareOrder(Order $order): Order
     {
-        $order->update([
-            'status' => 'preparing',
-            'preparing_at' => now(),
-        ]);
+        return $this->startPreparing($order, auth()->user());
+    }
+
+    /**
+     * 3. Pick Item (Barcode Scanning / Checkbox)
+     */
+    public function pickItem(Order $order, int $orderItemId, int $qtyPicked, ?User $actor = null): OrderItem
+    {
+        return DB::transaction(function () use ($order, $orderItemId, $qtyPicked, $actor) {
+            $item = OrderItem::where('order_id', $order->id)->findOrFail($orderItemId);
+            $item->update([
+                'picked_quantity' => $qtyPicked,
+                'item_status' => $qtyPicked >= $item->quantity ? 'picked' : ($qtyPicked > 0 ? 'partially_picked' : 'pending'),
+            ]);
+
+            // Check if all items in order are picked
+            $remaining = OrderItem::where('order_id', $order->id)->whereColumn('picked_quantity', '<', 'quantity')->count();
+            if ($remaining === 0) {
+                $order->update(['picking_status' => 'completed']);
+            }
+
+            $this->logActivity($order, 'item_picked', "Picked {$qtyPicked}/{$item->quantity} × {$item->product_name}", [
+                'item_id' => $item->id,
+                'picked_quantity' => $qtyPicked,
+                'required_quantity' => $item->quantity,
+            ], $actor);
+
+            return $item;
+        });
+    }
+
+    /**
+     * 4. Mark Ready (Preparing -> Ready)
+     */
+    public function markReady(Order $order, ?User $actor = null): Order
+    {
+        return DB::transaction(function () use ($order, $actor) {
+            $fromStatus = $order->status;
+            $order->update([
+                'status' => 'ready',
+                'ready_at' => now(),
+                'picking_status' => 'completed',
+            ]);
+
+            $this->logStatusChange($order, $fromStatus, 'ready', 'Order packed and ready for dispatch', $actor);
+            $this->logActivity($order, 'order_ready', "Order #{$order->order_number} packed and ready for delivery", null, $actor);
+
+            return $order;
+        });
+    }
+
+    /**
+     * 5. Assign Driver
+     */
+    public function assignDriver(Order $order, int $driverId, ?User $actor = null): Order
+    {
+        $driver = User::findOrFail($driverId);
+        $order->update(['delivery_staff_id' => $driver->id]);
+
+        $this->logActivity($order, 'driver_assigned', "Assigned to driver {$driver->name}", [
+            'driver_id' => $driver->id,
+            'driver_name' => $driver->name,
+        ], $actor);
 
         return $order;
     }
 
+    /**
+     * 6. Out for Delivery / Dispatch
+     */
+    public function dispatchOrder(Order $order, ?int $deliveryStaffId = null, ?float $customDeliveryCost = null, ?User $actor = null): Order
+    {
+        return DB::transaction(function () use ($order, $deliveryStaffId, $customDeliveryCost, $actor) {
+            $fromStatus = $order->status;
+            $driverId = $deliveryStaffId ?: $order->delivery_staff_id;
+            $deliveryCost = $customDeliveryCost ?? $order->internal_delivery_cost;
+            $netProfit = $order->gross_profit - $deliveryCost;
+
+            $order->update([
+                'status' => 'out_for_delivery',
+                'delivery_staff_id' => $driverId,
+                'internal_delivery_cost' => $deliveryCost,
+                'net_profit' => $netProfit,
+                'out_for_delivery_at' => now(),
+            ]);
+
+            $driverName = $order->deliveryStaff?->name ?? 'Driver';
+            $this->logStatusChange($order, $fromStatus, 'out_for_delivery', "Dispatched with {$driverName}", $actor);
+            $this->logActivity($order, 'out_for_delivery', "Dispatched with driver: {$driverName}", [
+                'driver_id' => $driverId,
+            ], $actor);
+
+            return $order;
+        });
+    }
+
+    /** Backward-compatible alias */
     public function outForDelivery(Order $order, ?int $deliveryStaffId = null, ?float $customDeliveryCost = null): Order
     {
-        $deliveryCost = $customDeliveryCost ?? $order->internal_delivery_cost;
-        $netProfit = $order->gross_profit - $deliveryCost;
-
-        $order->update([
-            'status' => 'out_for_delivery',
-            'delivery_staff_id' => $deliveryStaffId,
-            'internal_delivery_cost' => $deliveryCost,
-            'net_profit' => $netProfit,
-            'out_for_delivery_at' => now(),
-        ]);
-
-        return $order;
+        return $this->dispatchOrder($order, $deliveryStaffId, $customDeliveryCost, auth()->user());
     }
 
-    public function deliverOrder(Order $order): Order
+    /**
+     * 7. Mark Delivered
+     */
+    public function deliverOrder(Order $order, ?User $actor = null): Order
     {
-        $order->update([
-            'status' => 'delivered',
-            'payment_status' => 'paid',
-            'delivered_at' => now(),
-        ]);
+        return DB::transaction(function () use ($order, $actor) {
+            $fromStatus = $order->status;
+            $order->update([
+                'status' => 'delivered',
+                'delivered_at' => now(),
+            ]);
 
-        return $order;
+            $this->logStatusChange($order, $fromStatus, 'delivered', 'Order delivered to customer villa', $actor);
+            $this->logActivity($order, 'delivered', "Order delivered successfully to {$order->customer_villa}", null, $actor);
+
+            return $order;
+        });
     }
 
-    public function cancelOrder(Order $order, string $reason = 'Cancelled by user/admin'): Order
+    /**
+     * 8. Collect Cash on Delivery (COD)
+     */
+    public function collectCod(Order $order, float $amount, ?string $differenceReason = null, ?User $actor = null): Order
     {
-        return DB::transaction(function () use ($order, $reason) {
+        return DB::transaction(function () use ($order, $amount, $differenceReason, $actor) {
+            $expected = (float) $order->total_amount;
+            $isExact = abs($amount - $expected) < 0.01;
+
+            $order->update([
+                'payment_status' => 'paid',
+                'cod_collected_at' => now(),
+                'cod_collected_amount' => $amount,
+                'cod_collected_by' => $actor?->name ?? 'Admin',
+                'cod_difference_reason' => $isExact ? null : $differenceReason,
+            ]);
+
+            $this->logActivity($order, 'payment_collected', "Cash collected: AED " . number_format($amount, 2) . ($isExact ? ' (Full Amount)' : " [Diff Reason: {$differenceReason}]"), [
+                'amount' => $amount,
+                'expected' => $expected,
+                'difference' => $expected - $amount,
+                'collected_by' => $actor?->name ?? 'Admin',
+            ], $actor);
+
+            return $order;
+        });
+    }
+
+    /**
+     * 9. Record Failed Delivery
+     */
+    public function failDelivery(Order $order, string $reason, ?string $notes = null, ?User $actor = null): Order
+    {
+        return DB::transaction(function () use ($order, $reason, $notes, $actor) {
+            $fromStatus = $order->status;
+            $order->update([
+                'status' => 'failed_delivery',
+                'failed_delivery_at' => now(),
+                'failed_delivery_reason' => $reason,
+                'delivery_notes' => $notes ?: $order->delivery_notes,
+            ]);
+
+            $this->logStatusChange($order, $fromStatus, 'failed_delivery', "Delivery failed: {$reason}", $actor);
+            $this->logActivity($order, 'delivery_failed', "Delivery attempt failed. Reason: {$reason}", [
+                'reason' => $reason,
+                'notes' => $notes,
+            ], $actor);
+
+            return $order;
+        });
+    }
+
+    /**
+     * 10. Cancel Order & Restore Stock Atomically
+     */
+    public function cancelOrder(Order $order, string $reason = 'Cancelled by admin', ?User $actor = null): Order
+    {
+        return DB::transaction(function () use ($order, $reason, $actor) {
             if ($order->status === 'cancelled') {
                 return $order;
             }
 
-            // Restore stock if previously deducted
+            $fromStatus = $order->status;
+
+            // Restore stock if previously deducted/reserved
             foreach ($order->items as $item) {
-                if ($item->product) {
+                if ($item->product_id) {
                     $product = Product::lockForUpdate()->find($item->product_id);
                     if ($product) {
                         $stockBefore = $product->stock_quantity;
@@ -228,8 +411,8 @@ class OrderService
                             'stock_after' => $stockAfter,
                             'reference_type' => 'Order',
                             'reference_id' => $order->id,
-                            'reason' => "Order #{$order->order_number} cancelled: {$reason}",
-                            'created_by' => auth()->user()?->name ?? 'System',
+                            'reason' => "Restocked from Cancelled Order #{$order->order_number}: {$reason}",
+                            'created_by' => $actor?->name ?? auth()->user()?->name ?? 'System',
                         ]);
                     }
                 }
@@ -241,7 +424,98 @@ class OrderService
                 'cancel_reason' => $reason,
             ]);
 
+            $this->logStatusChange($order, $fromStatus, 'cancelled', $reason, $actor);
+            $this->logActivity($order, 'cancelled', "Order cancelled. Reason: {$reason}", [
+                'reason' => $reason,
+            ], $actor);
+
             return $order;
         });
     }
+
+    /**
+     * 11. Expire Awaiting WhatsApp Order & Release Stock
+     */
+    public function expireOrder(Order $order, ?User $actor = null): Order
+    {
+        return DB::transaction(function () use ($order, $actor) {
+            if (!in_array($order->status, ['awaiting_whatsapp', 'pending'])) {
+                return $order;
+            }
+
+            $fromStatus = $order->status;
+
+            // Release reserved stock back into inventory
+            foreach ($order->items as $item) {
+                if ($item->product_id) {
+                    $product = Product::lockForUpdate()->find($item->product_id);
+                    if ($product) {
+                        $stockBefore = $product->stock_quantity;
+                        $stockAfter = $stockBefore + $item->quantity;
+
+                        $product->update([
+                            'stock_quantity' => $stockAfter,
+                        ]);
+
+                        StockMovement::create([
+                            'product_id' => $product->id,
+                            'type' => 'Release',
+                            'quantity' => $item->quantity,
+                            'stock_before' => $stockBefore,
+                            'stock_after' => $stockAfter,
+                            'reference_type' => 'Order',
+                            'reference_id' => $order->id,
+                            'reason' => "Released reservation for Expired Order #{$order->order_number}",
+                            'created_by' => 'System/Expiry',
+                        ]);
+                    }
+                }
+            }
+
+            $order->update([
+                'status' => 'expired',
+                'cancel_reason' => 'Customer did not complete WhatsApp confirmation within allowed window',
+            ]);
+
+            $this->logStatusChange($order, $fromStatus, 'expired', 'WhatsApp confirmation timed out', $actor);
+            $this->logActivity($order, 'expired', 'Order marked as expired. Reserved stock released back to store.', null, $actor);
+
+            return $order;
+        });
+    }
+
+    /**
+     * Log Order Activity
+     */
+    public function logActivity(Order $order, string $activityType, string $description, ?array $metadata = null, ?User $actor = null): OrderActivity
+    {
+        $actorUser = $actor ?: auth()->user();
+
+        return OrderActivity::create([
+            'order_id' => $order->id,
+            'actor_type' => $actorUser ? $actorUser->role : 'system',
+            'actor_id' => $actorUser?->id,
+            'actor_name' => $actorUser?->name ?? 'System',
+            'activity_type' => $activityType,
+            'description' => $description,
+            'metadata' => $metadata,
+        ]);
+    }
+
+    /**
+     * Log Status Transition in OrderStatusHistory
+     */
+    public function logStatusChange(Order $order, ?string $fromStatus, string $toStatus, ?string $reason = null, ?User $actor = null): OrderStatusHistory
+    {
+        $actorUser = $actor ?: auth()->user();
+
+        return OrderStatusHistory::create([
+            'order_id' => $order->id,
+            'from_status' => $fromStatus,
+            'to_status' => $toStatus,
+            'changed_by' => $actorUser?->name ?? 'System',
+            'reason' => $reason,
+        ]);
+    }
 }
+

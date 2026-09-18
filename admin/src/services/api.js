@@ -102,11 +102,69 @@ export const adminApi = {
     const res = await client.get(`${getApiBaseUrl()}/admin/orders/${id}`);
     return res.data;
   },
-  updateOrderStatus: async (id, status, paymentStatus = null) => {
+  updateOrderStatus: async (id, status, paymentStatus = null, reason = null) => {
     const res = await client.put(`${getApiBaseUrl()}/admin/orders/${id}/status`, {
       status,
       payment_status: paymentStatus,
+      reason,
     });
+    return res.data;
+  },
+  confirmOrder: async (id) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/orders/${id}/confirm`);
+    return res.data;
+  },
+  prepareOrder: async (id) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/orders/${id}/prepare`);
+    return res.data;
+  },
+  readyOrder: async (id) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/orders/${id}/ready`);
+    return res.data;
+  },
+  assignDriver: async (id, driverId) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/orders/${id}/assign-driver`, { driver_id: driverId });
+    return res.data;
+  },
+  dispatchOrder: async (id, driverId = null) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/orders/${id}/dispatch`, { driver_id: driverId });
+    return res.data;
+  },
+  deliverOrder: async (id) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/orders/${id}/deliver`);
+    return res.data;
+  },
+  collectPayment: async (id, amount, diffReason = null) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/orders/${id}/payment`, {
+      amount,
+      difference_reason: diffReason,
+    });
+    return res.data;
+  },
+  failDelivery: async (id, reason, notes = null) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/orders/${id}/fail-delivery`, {
+      reason,
+      notes,
+    });
+    return res.data;
+  },
+  cancelOrder: async (id, reason) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/orders/${id}/cancel`, { reason });
+    return res.data;
+  },
+  pickItem: async (id, orderItemId, quantity) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/orders/${id}/pick-item`, {
+      order_item_id: orderItemId,
+      quantity,
+    });
+    return res.data;
+  },
+  getOrderActivity: async (id) => {
+    const res = await client.get(`${getApiBaseUrl()}/admin/orders/${id}/activity`);
+    return res.data;
+  },
+  bulkActionOrders: async (payload) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/orders/bulk-action`, payload);
     return res.data;
   },
 
