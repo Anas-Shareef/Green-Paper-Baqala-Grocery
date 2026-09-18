@@ -92,26 +92,37 @@ export function InventoryPage() {
   // Fallback placeholder image SVG
   const fallbackImage = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="%2310b981" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>';
 
-  // Load Products & Categories
+  // Debounced search to prevent request per keystroke
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Load Products
   const fetchProducts = async () => {
     setProductsLoading(true);
     try {
       const params = {};
-      if (search) params.q = search;
+      if (debouncedSearch) params.q = debouncedSearch;
       if (selectedCategory) params.category_id = selectedCategory;
       if (stockStatusFilter) params.stock_status = stockStatusFilter;
       if (statusFilter) params.status = statusFilter;
 
-      const [prodRes, catRes] = await Promise.all([
-        adminApi.getProducts(params),
-        adminApi.getCategories(),
-      ]);
-
+      const prodRes = await adminApi.getProducts(params);
       if (prodRes && prodRes.data) {
         setProducts(prodRes.data.data || prodRes.data || []);
       }
-      if (catRes && catRes.data) {
-        setCategories(catRes.data || []);
+
+      // Cache categories: only fetch once if empty
+      if (categories.length === 0) {
+        const catRes = await adminApi.getCategories();
+        if (catRes && catRes.data) {
+          setCategories(catRes.data || []);
+        }
       }
     } catch (e) {
       console.error('Fetch products error:', e);
@@ -120,7 +131,7 @@ export function InventoryPage() {
     }
   };
 
-  // Load Stock Movements
+  // Load Stock Movements (Lazy loaded)
   const fetchMovements = async () => {
     try {
       const res = await adminApi.getInventory();
@@ -134,8 +145,13 @@ export function InventoryPage() {
 
   useEffect(() => {
     fetchProducts();
-    fetchMovements();
-  }, [search, selectedCategory, stockStatusFilter, statusFilter]);
+  }, [debouncedSearch, selectedCategory, stockStatusFilter, statusFilter]);
+
+  useEffect(() => {
+    if (activeTab === 'movements') {
+      fetchMovements();
+    }
+  }, [activeTab]);
 
   // Product Selection Handlers
   const handleSelectAll = (e) => {

@@ -156,7 +156,7 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs text-xs">
             <!-- Search -->
             <div class="col-span-1 sm:col-span-2">
-                <input type="text" wire:model.live.debounce.300ms="search" placeholder="Search by name, barcode e.g. 8901288030609, SKU, brand..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 outline-none focus:border-emerald-500 font-medium">
+                <input type="text" wire:model.live.debounce.400ms="search" placeholder="Search by name, barcode e.g. 8901288030609, SKU, brand..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 outline-none focus:border-emerald-500 font-medium">
             </div>
 
             <!-- Category -->
@@ -334,8 +334,19 @@
                 </table>
             </div>
 
-            <div class="p-4 border-t border-slate-100">
-                {{ $products->links() }}
+            <div class="p-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div class="flex items-center gap-2 text-xs text-slate-500 font-semibold">
+                    <span>Show:</span>
+                    <select wire:model.live="perPage" class="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500">
+                        <option value="25">25 per page</option>
+                        <option value="50">50 per page</option>
+                        <option value="100">100 per page</option>
+                    </select>
+                    <span>of {{ number_format($products->total()) }} products</span>
+                </div>
+                <div>
+                    {{ $products->links() }}
+                </div>
             </div>
         </div>
     </div>

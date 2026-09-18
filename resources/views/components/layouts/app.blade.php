@@ -571,7 +571,68 @@
             }
         }
     }
+
+    // Deterministic Safe Modal Control (prevents showModal InvalidStateError)
+    window.safeOpenModal = function(target) {
+        if (!target) return;
+        const dialog = typeof target === 'string' ? document.getElementById(target) : target;
+        if (!dialog) return;
+        if (dialog.open) {
+            dialog.close();
+        }
+        try {
+            dialog.showModal();
+        } catch (e) {
+            console.warn('safeOpenModal fallback:', e);
+            dialog.close();
+            requestAnimationFrame(() => {
+                if (!dialog.open) dialog.showModal();
+            });
+        }
+    };
+
+    window.safeCloseModal = function(target) {
+        if (!target) return;
+        const dialog = typeof target === 'string' ? document.getElementById(target) : target;
+        if (!dialog) return;
+        if (dialog.open) {
+            dialog.close();
+        }
+    };
+
+    // Intercept Livewire Error Popups & Suppress Broken Debug Dialog
+    document.addEventListener('livewire:init', () => {
+        if (window.Livewire && typeof Livewire.hook === 'function') {
+            Livewire.hook('request', ({ uri, options, payload, respond, succeed, fail }) => {
+                fail(({ status, content, preventDefault }) => {
+                    // Suppress Livewire's default broken modal.showModal() chain
+                    preventDefault();
+                    console.warn(`[Baqqala Livewire Interceptor] Request failed with status ${status}`);
+
+                    // Clean up any stray livewire-error dialog
+                    const stray = document.getElementById('livewire-error');
+                    if (stray) {
+                        stray.remove();
+                        document.body.style.overflow = 'visible';
+                    }
+
+                    // Display user-friendly notification
+                    const container = document.getElementById('admin-toast-container');
+                    if (container) {
+                        const toast = document.createElement('div');
+                        toast.className = 'p-3.5 bg-rose-600 text-white rounded-2xl shadow-xl text-xs font-bold flex items-center justify-between gap-3 border border-rose-700 animate-bounce';
+                        toast.innerHTML = `<span>⚠️ Server request took too long or failed (${status}). Please try again.</span><button onclick="this.parentElement.remove()" class="text-white hover:text-rose-200 text-base font-black">&times;</button>`;
+                        container.appendChild(toast);
+                        setTimeout(() => { if (toast.parentElement) toast.remove(); }, 6000);
+                    }
+                });
+            });
+        }
+    });
     </script>
+
+    <!-- Global Toast Container -->
+    <div id="admin-toast-container" class="fixed bottom-5 right-5 z-[9999] flex flex-col gap-2 max-w-sm pointer-events-auto"></div>
 
     @livewireScripts
 </body>

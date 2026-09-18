@@ -27,7 +27,14 @@ class AdminProductController extends BaseApiController
      */
     public function index(Request $request): JsonResponse
     {
-        $query = Product::with('category');
+        $query = Product::select([
+            'id', 'category_id', 'barcode', 'sku', 'name', 'brand', 'unit',
+            'wholesale_cost', 'retail_price', 'stock_quantity', 'reserved_quantity',
+            'minimum_stock_level', 'maximum_stock_level', 'image', 'status',
+            'expiry_date', 'supplier_name'
+        ])->with(['category' => function ($q) {
+            $q->select('id', 'name');
+        }]);
 
         if ($request->has('category_id') && !empty($request->input('category_id'))) {
             $query->where('category_id', $request->input('category_id'));

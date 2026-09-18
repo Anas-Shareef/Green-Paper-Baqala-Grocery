@@ -21,7 +21,9 @@ class AdminCategoryController extends BaseApiController
 
     public function index(): JsonResponse
     {
-        $categories = Category::withCount('products')->orderBy('sort_order', 'asc')->get();
+        $categories = \Illuminate\Support\Facades\Cache::remember('admin_categories_list', 300, function () {
+            return Category::withCount('products')->orderBy('sort_order', 'asc')->get();
+        });
         return $this->successResponse($categories, 'Categories retrieved successfully');
     }
 
@@ -55,6 +57,9 @@ class AdminCategoryController extends BaseApiController
             'status' => $request->input('status', 'active'),
         ]);
 
+        \Illuminate\Support\Facades\Cache::forget('admin_categories_list');
+        \Illuminate\Support\Facades\Cache::forget('inventory_active_categories');
+
         return $this->successResponse($category, 'Category created successfully', 201);
     }
 
@@ -86,6 +91,9 @@ class AdminCategoryController extends BaseApiController
 
         $category->update(array_filter($data, fn($v) => $v !== null));
 
+        \Illuminate\Support\Facades\Cache::forget('admin_categories_list');
+        \Illuminate\Support\Facades\Cache::forget('inventory_active_categories');
+
         return $this->successResponse($category->fresh(), 'Category updated successfully');
     }
 
@@ -106,6 +114,8 @@ class AdminCategoryController extends BaseApiController
                 $category->products()->update(['category_id' => $targetId]);
             } elseif ($request->boolean('archive')) {
                 $category->update(['status' => 'inactive']);
+                \Illuminate\Support\Facades\Cache::forget('admin_categories_list');
+                \Illuminate\Support\Facades\Cache::forget('inventory_active_categories');
                 return $this->successResponse([
                     'action' => 'archived',
                     'products_count' => $productsCount,
@@ -123,6 +133,8 @@ class AdminCategoryController extends BaseApiController
         }
 
         $category->delete();
+        \Illuminate\Support\Facades\Cache::forget('admin_categories_list');
+        \Illuminate\Support\Facades\Cache::forget('inventory_active_categories');
         return $this->successResponse(['action' => 'deleted'], 'Category deleted successfully');
     }
 }

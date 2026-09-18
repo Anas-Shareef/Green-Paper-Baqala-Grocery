@@ -59,7 +59,12 @@ Route::post('/logout', function () {
 Route::middleware(['auth'])->group(function () {
     Route::get('/admin/dashboard', Dashboard::class)->name('admin.dashboard');
     Route::get('/pos', PosScreen::class)->name('pos');
-    Route::get('/admin/inventory', Inventory::class)->name('admin.inventory');
+    Route::get('/admin/inventory', function (\Illuminate\Http\Request $request) {
+        if ($request->query('legacy') === 'livewire') {
+            return (new \App\Livewire\Admin\Inventory())();
+        }
+        return view('admin-react');
+    })->name('admin.inventory');
     Route::get('/admin/receiving', StockReceiving::class)->name('admin.receiving');
     Route::get('/admin/customers', Customers::class)->name('admin.customers');
     Route::get('/admin/orders', Orders::class)->name('admin.orders');

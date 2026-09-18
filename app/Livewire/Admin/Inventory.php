@@ -52,6 +52,7 @@ class Inventory extends Component
     public string $stockFilter = ''; // all, in_stock, low_stock, out_of_stock, negative, overstocked
     public string $expiryFilter = ''; // all, expired, within_3_days, within_7_days, within_30_days
     public string $sortBy = 'urgency'; // urgency, name, stock_asc, stock_desc, cost_desc, retail_desc
+    public int $perPage = 25; // 25, 50, 100 products per page
 
     // Slide-over Product Detail Drawer
     public ?int $drawerProductId = null;
@@ -127,6 +128,17 @@ class Inventory extends Component
     public function updatedExpiryFilter()
     {
         $this->resetPage();
+    }
+
+    public function updatedPerPage()
+    {
+        $this->resetPage();
+    }
+
+    private function clearInventoryCache(): void
+    {
+        \Illuminate\Support\Facades\Cache::forget('inventory_kpis');
+        \Illuminate\Support\Facades\Cache::forget('inventory_active_categories');
     }
 
     // ==========================================
@@ -662,7 +674,8 @@ class Inventory extends Component
             fclose($handle);
         };
 
-        return response()->stream($callback, 200, $headers);
+        $filename = 'baqqala_inventory_' . date('Y-m-d_His') . '.csv';
+        return response()->streamDownload($callback, $filename, $headers);
     }
 
     // ==========================================
@@ -671,7 +684,16 @@ class Inventory extends Component
 
     private function buildStockQuery()
     {
-        $query = Product::with('category')->where('status', 'active');
+        $query = Product::select([
+            'id', 'category_id', 'barcode', 'sku', 'name', 'brand', 'unit',
+            'wholesale_cost', 'retail_price', 'stock_quantity', 'reserved_quantity',
+            'minimum_stock_level', 'maximum_stock_level', 'image', 'status',
+            'expiry_date', 'supplier_name'
+        ])
+        ->with(['category' => function ($q) {
+            $q->select('id', 'name');
+        }])
+        ->where('status', 'active');
 
         if (!empty(trim($this->search))) {
             $term = trim($this->search);
@@ -737,32 +759,43 @@ class Inventory extends Component
 
     public function render(InventoryService $inventoryService)
     {
-        $kpis = $inventoryService->getInventoryKPIs();
-        $categories = Category::where('status', 'active')->orderBy('name')->get();
+        // 5-minute cached KPIs to prevent 25s timeout on interactive updates
+        $kpis = \Illuminate\Support\Facades\Cache::remember('inventory_kpis', 300, function () use ($inventoryService) {
+            return $inventoryService->getInventoryKPIs();
+        });
 
-        // 1. Stock Tab Products
-        $products = $this->buildStockQuery()->paginate(20);
+        // 5-minute cached active categories list
+        $categories = \Illuminate\Support\Facades\Cache::remember('inventory_active_categories', 300, function () {
+            return Category::where('status', 'active')->orderBy('name')->get(['id', 'name', 'slug', 'image']);
+        });
 
-        // 2. Movements Ledger Tab
-        $movements = StockMovement::with('product')
-            ->orderBy('id', 'desc')
-            ->paginate(30);
+        // 1. Stock Tab Products: only run full query when on stock tab
+        $products = ($this->activeTab === 'stock')
+            ? $this->buildStockQuery()->paginate($this->perPage)
+            : Product::where('status', 'active')->paginate(1);
 
-        // 3. Stock Counts Tab
-        $counts = StockCount::with(['category', 'items.product'])
-            ->orderBy('id', 'desc')
-            ->get();
+        // 2. Movements Ledger Tab: LAZY LOAD only when on movements tab
+        $movements = ($this->activeTab === 'movements')
+            ? StockMovement::with(['product' => function ($q) {
+                $q->select('id', 'name', 'barcode');
+            }])->orderBy('id', 'desc')->paginate(30)
+            : collect();
 
-        $activeCount = $this->activeCountId 
-            ? StockCount::with(['category', 'items.product'])->find($this->activeCountId)
+        // 3. Stock Counts Tab: LAZY LOAD only when on counts tab
+        $counts = ($this->activeTab === 'counts')
+            ? StockCount::with(['category:id,name', 'items.product:id,name,barcode'])->orderBy('id', 'desc')->get()
+            : collect();
+
+        $activeCount = ($this->activeTab === 'counts' && $this->activeCountId)
+            ? StockCount::with(['category:id,name', 'items.product:id,name,barcode'])->find($this->activeCountId)
             : null;
 
-        // 4. Reorder Suggestions Tab
+        // 4. Reorder Suggestions Tab: LAZY LOAD only when on reorder tab
         $reorderSuggestions = ($this->activeTab === 'reorder')
             ? $inventoryService->getReorderRecommendations(50)
             : collect();
 
-        // 5. Valuation Breakdown Tab
+        // 5. Valuation Breakdown Tab: LAZY LOAD only when on valuation tab
         $categoryValuations = ($this->activeTab === 'valuation')
             ? $inventoryService->getValuationByCategory()
             : collect();
