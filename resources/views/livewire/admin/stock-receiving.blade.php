@@ -1,171 +1,325 @@
 <div class="p-6 space-y-6">
     
-    <!-- Page Header -->
+    <!-- Header & KPIs -->
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200/80 pb-5">
         <div>
             <h1 class="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3">
                 Stock Receiving Station
-                <span class="badge badge-emerald">Barcode Scanner Active</span>
+                <span class="badge badge-emerald">Datalogic QuickScan Lite Active</span>
             </h1>
-            <p class="text-xs text-slate-500 mt-1">Scan stock delivery packages, enter received quantities, and update wholesale cost ledgers.</p>
+            <p class="text-xs text-slate-500 mt-1">Authoritative inbound stock workflow. Scan delivery barcodes to accumulate quantities in place, verify wholesale costs, and record immutable Goods Received Notes (GRN).</p>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <button wire:click="$set('viewMode', '{{ $viewMode === 'station' ? 'history' : 'station' }}')" class="btn-outline text-xs py-2">
+                {{ $viewMode === 'station' ? 'View GRN History' : 'Back to Receiving Station' }}
+            </button>
+            <button wire:click="resetSession" class="btn-glow text-xs py-2">
+                + New Receipt
+            </button>
+        </div>
+    </div>
+
+    <!-- KPIs Bar -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+            <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Draft Receipts</div>
+            <div class="text-2xl font-black text-slate-800 mt-1 font-mono">{{ $kpis['draft_count'] }}</div>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+            <div class="text-[10px] font-bold uppercase tracking-wider text-amber-500">Pending Review</div>
+            <div class="text-2xl font-black text-amber-600 mt-1 font-mono">{{ $kpis['pending_count'] }}</div>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+            <div class="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Received Today</div>
+            <div class="text-2xl font-black text-emerald-700 mt-1 font-mono">{{ $kpis['received_today_count'] }} (AED {{ number_format($kpis['received_today_value'], 2) }})</div>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+            <div class="text-[10px] font-bold uppercase tracking-wider text-indigo-600">Month Total Value</div>
+            <div class="text-2xl font-black text-indigo-700 mt-1 font-mono">AED {{ number_format($kpis['month_total_value'], 2) }}</div>
         </div>
     </div>
 
     @if(session()->has('message'))
-    <div class="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-sm font-semibold">
+    <div class="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-semibold">
         {{ session('message') }}
     </div>
     @endif
-    @if(session()->has('info'))
-    <div class="p-4 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-sm font-semibold">
-        {{ session('info') }}
+    @if(session()->has('error'))
+    <div class="p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl text-xs font-semibold">
+        {{ session('error') }}
     </div>
     @endif
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    @if($viewMode === 'station')
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        <!-- LEFT 2 COLS: Scan & Receive Panel -->
-        <div class="lg:col-span-2 space-y-5">
+        <!-- LEFT 8 COLS: Scanner Bar & Items Table -->
+        <div class="lg:col-span-8 space-y-5">
             
-            <!-- Scan Barcode Box -->
-            <div class="bg-white border border-slate-200/80 rounded-2xl p-5 space-y-4 shadow-xs">
-                <h3 class="font-extrabold text-slate-900 text-base flex items-center gap-2">
-                    <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path></svg>
-                    Step 1: Scan Barcode or Select Product
-                </h3>
+            <!-- Scanner Wedge Box -->
+            <div class="bg-slate-900 text-white rounded-2xl p-5 shadow-lg border border-slate-700 space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="font-extrabold text-sm tracking-wide text-emerald-400 uppercase flex items-center gap-2">
+                        <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+                        ⚡ Scanner Ready (USB Keyboard Wedge)
+                    </span>
+                    <span class="text-xs text-slate-400 font-mono">Suffix: ENTER</span>
+                </div>
 
                 <form wire:submit.prevent="scanBarcode" class="flex gap-2">
                     <input type="text" 
                            wire:model.defer="barcodeInput" 
-                           placeholder="Scan item barcode e.g. 8901288030609..." 
+                           placeholder="Scan product barcode (Datalogic sends barcode + ENTER)..." 
                            autofocus
-                           class="flex-1 input-field font-mono font-bold text-sm py-3 border-2 border-emerald-500/50">
-                    <button type="submit" class="btn-glow py-3">
-                        Scan Item
+                           class="flex-1 bg-slate-950 border-2 border-emerald-500/60 rounded-xl px-4 py-3 font-mono font-bold text-white text-base focus:outline-none focus:border-emerald-400 placeholder:text-slate-500">
+                    <button type="submit" class="btn-glow py-3 px-5">
+                        Capture Scan
                     </button>
                 </form>
 
-                <div class="pt-2">
-                    <label class="block text-xs text-slate-600 font-bold mb-1">Or Pick From Catalog List:</label>
-                    <select wire:change="selectProduct($event.target.value)" class="input-field">
-                        <option value="">-- Choose Product --</option>
-                        @foreach($productsList as $pl)
-                        <option value="{{ $pl->id }}" {{ $selectedProductId === $pl->id ? 'selected' : '' }}>
-                            {{ $pl->name }} (Barcode: {{ $pl->barcode }} | Stock: {{ $pl->stock_quantity }})
-                        </option>
+                <div class="flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                    <span>Last Barcode: <strong class="text-white">{{ $lastScannedBarcode ?: 'None' }}</strong></span>
+                    <span>Status: <strong class="text-emerald-400">{{ $scannerStatus }}</strong></span>
+                </div>
+            </div>
+
+            <!-- Items Table -->
+            <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+                <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+                    <h2 class="font-bold text-base text-slate-900">
+                        Received Items ({{ count($items) }})
+                    </h2>
+                </div>
+
+                @if(empty($items))
+                <div class="p-10 text-center text-slate-400 text-xs">
+                    Receiving session empty. Scan products using your Datalogic barcode scanner or enter barcodes manually.
+                </div>
+                @else
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold border-b border-slate-200/60">
+                            <tr>
+                                <th class="py-3 px-4">Item</th>
+                                <th class="py-3 px-3 text-center w-20">Received</th>
+                                <th class="py-3 px-3 text-center w-16">Damaged</th>
+                                <th class="py-3 px-3 text-right w-24">Cost (AED)</th>
+                                <th class="py-3 px-3 text-right w-24">Subtotal</th>
+                                <th class="py-3 px-3 text-center w-28">Expiry</th>
+                                <th class="py-3 px-3 text-center w-8"></th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 font-medium">
+                            @foreach($items as $idx => $it)
+                            <tr class="hover:bg-slate-50/70">
+                                <td class="py-3 px-4">
+                                    <div class="font-bold text-slate-900">{{ $it['product_name'] }}</div>
+                                    <div class="text-[10px] text-slate-400 font-mono">{{ $it['barcode'] }}</div>
+                                </td>
+                                <td class="py-3 px-3 text-center">
+                                    <input type="number" min="1" wire:model="items.{{ $idx }}.quantity_received" wire:change="recalculateLine({{ $idx }})" class="w-16 px-2 py-1 text-center font-mono font-bold bg-emerald-50 border border-emerald-300 rounded-md">
+                                </td>
+                                <td class="py-3 px-3 text-center">
+                                    <input type="number" min="0" wire:model="items.{{ $idx }}.quantity_damaged" wire:change="recalculateLine({{ $idx }})" class="w-14 px-2 py-1 text-center font-mono bg-slate-50 border border-slate-200 rounded-md text-rose-600">
+                                </td>
+                                <td class="py-3 px-3 text-right">
+                                    <input type="number" step="0.01" min="0" wire:model="items.{{ $idx }}.unit_cost" wire:change="recalculateLine({{ $idx }})" class="w-20 px-2 py-1 text-right font-mono font-bold bg-slate-50 border border-slate-200 rounded-md">
+                                </td>
+                                <td class="py-3 px-3 text-right font-mono font-bold text-slate-900">
+                                    AED {{ number_format($it['subtotal'], 2) }}
+                                </td>
+                                <td class="py-3 px-3 text-center">
+                                    <input type="date" wire:model="items.{{ $idx }}.expiry_date" class="w-24 px-1 py-1 text-[10px] font-mono bg-slate-50 border border-slate-200 rounded-md">
+                                </td>
+                                <td class="py-3 px-3 text-center">
+                                    <button wire:click="removeItem({{ $idx }})" class="text-slate-400 hover:text-rose-600 font-bold">&times;</button>
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+                @endif
+            </div>
+
+        </div>
+
+        <!-- RIGHT 4 COLS: Header & Totals -->
+        <div class="lg:col-span-4 space-y-5">
+            
+            <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs space-y-4 text-xs">
+                <div class="flex justify-between items-center border-b border-slate-100 pb-2 font-mono">
+                    <span class="text-slate-500">GRN Reference:</span>
+                    <span class="font-bold text-slate-900">{{ $grnNumber }}</span>
+                </div>
+
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <label class="font-bold text-slate-700">Supplier *</label>
+                        <button type="button" wire:click="$set('showSupplierModal', true)" class="text-emerald-600 font-bold hover:underline">+ Add</button>
+                    </div>
+                    <select wire:model="supplierId" class="input-field">
+                        <option value="">-- Choose Supplier --</option>
+                        @foreach($suppliers as $s)
+                        <option value="{{ $s->id }}">{{ $s->name }}</option>
                         @endforeach
                     </select>
-                </div>
-            </div>
-
-            <!-- Selected Item Receiving Details Form -->
-            @if($selectedProduct)
-            <div class="bg-white border-2 border-emerald-500/40 rounded-2xl p-6 space-y-4 shadow-sm">
-                <div class="flex justify-between items-start border-b border-slate-100 pb-4">
-                    <div>
-                        <span class="badge badge-emerald">Selected Item</span>
-                        <h2 class="text-xl font-black text-slate-900 mt-1.5">{{ $selectedProduct->name }}</h2>
-                        <p class="text-xs text-slate-500 font-mono mt-0.5">Barcode: {{ $selectedProduct->barcode }} • Unit: {{ $selectedProduct->unit }}</p>
-                    </div>
-                    <div class="text-right bg-slate-50 p-3 rounded-xl border border-slate-200 font-mono">
-                        <div class="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Current System Stock</div>
-                        <div class="text-2xl font-black text-emerald-600">{{ $selectedProduct->stock_quantity }}</div>
-                    </div>
-                </div>
-
-                <form wire:submit.prevent="submitReceiving" class="space-y-4 text-xs">
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">Quantity Received (+)</label>
-                            <input type="number" min="1" wire:model.defer="receivingQuantity" required class="input-field font-mono font-bold text-lg py-3">
-                        </div>
-                        <div>
-                            <label class="block font-bold text-slate-700 mb-1">Stock Movement Reason</label>
-                            <input type="text" wire:model.defer="reason" required class="input-field py-3">
-                        </div>
-                    </div>
-
-                    <div class="bg-slate-50 p-3.5 rounded-xl text-xs space-y-1.5 font-mono text-slate-700 border border-slate-200">
-                        <div class="flex justify-between">
-                            <span>Stock Before:</span>
-                            <span>{{ $selectedProduct->stock_quantity }} units</span>
-                        </div>
-                        <div class="flex justify-between font-bold text-emerald-700 text-sm pt-1.5 border-t border-slate-200">
-                            <span>New Stock Level After Receiving:</span>
-                            <span>{{ $selectedProduct->stock_quantity + (int)$receivingQuantity }} units</span>
-                        </div>
-                    </div>
-
-                    <button type="submit" class="w-full btn-glow py-3.5 text-center justify-center">
-                        Confirm Receiving & Update Ledger
-                    </button>
-                </form>
-            </div>
-            @endif
-
-        </div>
-
-        <!-- RIGHT COL: Recent Stock Receiving History -->
-        <div class="bg-white border border-slate-200/80 rounded-2xl p-5 space-y-4 shadow-xs h-fit">
-            <h3 class="font-extrabold text-slate-900 text-base">Recent Stock Purchase History</h3>
-
-            <div class="space-y-3 max-h-[500px] overflow-y-auto pr-1">
-                @foreach($recentReceivings as $rr)
-                <div class="p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs space-y-1 font-medium">
-                    <div class="flex justify-between items-start">
-                        <div class="font-bold text-slate-900 truncate max-w-[180px]">{{ $rr->product?->name ?? 'Unknown Item' }}</div>
-                        <span class="badge badge-emerald font-mono">+{{ $rr->quantity }} units</span>
-                    </div>
-                    <div class="text-[10px] text-slate-500 flex justify-between pt-1">
-                        <span>By: {{ $rr->created_by ?? 'Admin' }}</span>
-                        <span>{{ $rr->created_at->format('d M, H:i') }}</span>
-                    </div>
-                </div>
-                @endforeach
-            </div>
-        </div>
-
-    </div>
-
-    <!-- MODAL: Rapid Creation for Unknown Barcode -->
-    @if($showUnknownModal)
-    <div class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
-        <div class="bg-white border border-slate-200 rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4">
-            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 class="font-extrabold text-slate-900 text-base">Unknown Barcode Received</h3>
-                <button wire:click="$set('showUnknownModal', false)" class="text-slate-400 hover:text-slate-600">&times;</button>
-            </div>
-
-            <form wire:submit.prevent="saveUnknownProduct" class="space-y-3 text-xs">
-                <div>
-                    <label class="block font-bold text-slate-700 mb-1">Scanned Barcode</label>
-                    <input type="text" wire:model.defer="newBarcode" readonly class="input-field text-amber-700 font-mono font-bold">
-                </div>
-
-                <div>
-                    <label class="block font-bold text-slate-700 mb-1">Product Title *</label>
-                    <input type="text" wire:model.defer="newName" required placeholder="e.g. Organic Avocados 500g" class="input-field">
                 </div>
 
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="block font-bold text-slate-700 mb-1">Retail Price (₹) *</label>
-                        <input type="number" step="0.50" min="0" wire:model.defer="newRetailPrice" required class="input-field font-mono">
+                        <label class="font-bold text-slate-700 block mb-1">Invoice #</label>
+                        <input type="text" wire:model.defer="supplierInvoiceNumber" placeholder="INV-000" class="input-field">
                     </div>
                     <div>
-                        <label class="block font-bold text-slate-700 mb-1">Wholesale Cost (₹) *</label>
-                        <input type="number" step="0.50" min="0" wire:model.defer="newWholesaleCost" required class="input-field font-mono font-bold">
+                        <label class="font-bold text-slate-700 block mb-1">Invoice Date</label>
+                        <input type="date" wire:model.defer="invoiceDate" class="input-field">
                     </div>
                 </div>
 
                 <div>
-                    <label class="block font-bold text-slate-700 mb-1">Received Quantity *</label>
-                    <input type="number" min="1" wire:model.defer="receivingQuantity" required class="input-field font-mono font-bold">
+                    <label class="font-bold text-slate-700 block mb-1">Notes</label>
+                    <textarea wire:model.defer="notes" rows="2" placeholder="Damaged items, remarks..." class="input-field"></textarea>
                 </div>
 
-                <div class="pt-3 flex items-center justify-end gap-3 border-t border-slate-100">
+                <div class="pt-3 border-t border-slate-100 space-y-2 font-mono">
+                    <div class="flex justify-between text-slate-600">
+                        <span>Items Count:</span>
+                        <span class="font-bold text-slate-900">{{ count($items) }}</span>
+                    </div>
+                    <div class="flex justify-between text-slate-600">
+                        <span>Total Units:</span>
+                        <span class="font-bold text-slate-900">{{ array_sum(array_column($items, 'quantity_received')) }}</span>
+                    </div>
+                    <div class="flex justify-between font-bold text-slate-900 text-sm pt-2 border-t border-slate-200">
+                        <span>Grand Total:</span>
+                        <span class="text-emerald-600">AED {{ number_format(array_sum(array_column($items, 'subtotal')), 2) }}</span>
+                    </div>
+                </div>
+
+                <div class="pt-3 space-y-2">
+                    <button wire:click="confirmReceipt" class="w-full btn-glow py-3 text-center justify-center font-bold">
+                        Confirm Receipt & Update Stock
+                    </button>
+                    <button wire:click="saveDraft" class="w-full btn-outline py-2 text-center justify-center font-bold">
+                        Save as Draft
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+    @else
+
+    <!-- HISTORY VIEW -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div class="p-4 border-b border-slate-100 font-bold text-slate-900">
+            Goods Received Notes (GRN) Ledger
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold border-b border-slate-200/60">
+                    <tr>
+                        <th class="py-3 px-4">GRN #</th>
+                        <th class="py-3 px-4">Supplier</th>
+                        <th class="py-3 px-3">Invoice #</th>
+                        <th class="py-3 px-3">Date</th>
+                        <th class="py-3 px-3 text-center">Items</th>
+                        <th class="py-3 px-4 text-right">Total Amount</th>
+                        <th class="py-3 px-3 text-center">Status</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 font-medium font-mono">
+                    @foreach($history as $rec)
+                    <tr class="hover:bg-slate-50/70">
+                        <td class="py-3 px-4 font-black text-slate-900">{{ $rec->grn_number }}</td>
+                        <td class="py-3 px-4 font-sans font-bold text-slate-800">{{ $rec->supplier_name_snapshot ?? ($rec->supplier?->name ?? 'Local') }}</td>
+                        <td class="py-3 px-3 text-slate-600">{{ $rec->supplier_invoice_number ?? '—' }}</td>
+                        <td class="py-3 px-3 text-slate-500">{{ $rec->receiving_date }}</td>
+                        <td class="py-3 px-3 text-center font-bold">{{ count($rec->items) }}</td>
+                        <td class="py-3 px-4 text-right font-black text-slate-900">AED {{ number_format($rec->total_amount, 2) }}</td>
+                        <td class="py-3 px-3 text-center font-sans">
+                            <span class="badge {{ $rec->status === 'received' ? 'badge-emerald' : 'badge-slate' }}">
+                                {{ $rec->status }}
+                            </span>
+                        </td>
+                    </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+    </div>
+    @endif
+
+    <!-- UNKNOWN PRODUCT MODAL -->
+    @if($showUnknownModal)
+    <div class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 text-xs">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-base text-slate-900">Unknown Barcode Scanned</h3>
+                <button wire:click="$set('showUnknownModal', false)" class="text-slate-400">&times;</button>
+            </div>
+
+            <form wire:submit.prevent="createUnknownProduct" class="space-y-3">
+                <div>
+                    <label class="font-bold text-slate-700 block mb-1">Barcode</label>
+                    <input type="text" wire:model.defer="unknownBarcode" readonly class="input-field font-mono font-bold text-amber-800 bg-amber-50">
+                </div>
+                <div>
+                    <label class="font-bold text-slate-700 block mb-1">Product Title *</label>
+                    <input type="text" wire:model.defer="newProductName" required placeholder="e.g. Fresh Milk 1L" class="input-field">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">Wholesale Cost (AED) *</label>
+                        <input type="number" step="0.01" min="0" wire:model.defer="newWholesaleCost" required class="input-field font-mono">
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">Retail Price (AED) *</label>
+                        <input type="number" step="0.01" min="0" wire:model.defer="newRetailPrice" required class="input-field font-mono">
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
                     <button type="button" wire:click="$set('showUnknownModal', false)" class="btn-outline">Cancel</button>
-                    <button type="submit" class="btn-glow">Create & Receive Stock</button>
+                    <button type="submit" class="btn-glow">Create & Add to Receipt</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    @endif
+
+    <!-- QUICK SUPPLIER MODAL -->
+    @if($showSupplierModal)
+    <div class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 text-xs">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-base text-slate-900">Add Registered Supplier</h3>
+                <button wire:click="$set('showSupplierModal', false)" class="text-slate-400">&times;</button>
+            </div>
+
+            <form wire:submit.prevent="createQuickSupplier" class="space-y-3">
+                <div>
+                    <label class="font-bold text-slate-700 block mb-1">Supplier Company Name *</label>
+                    <input type="text" wire:model.defer="newSupplierName" required placeholder="e.g. Al Ain Dairy LLC" class="input-field">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">Phone</label>
+                        <input type="text" wire:model.defer="newSupplierPhone" placeholder="+971 4 000 0000" class="input-field">
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">TRN / Tax Number</label>
+                        <input type="text" wire:model.defer="newSupplierTax" placeholder="TRN-100xxxx" class="input-field font-mono">
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                    <button type="button" wire:click="$set('showSupplierModal', false)" class="btn-outline">Cancel</button>
+                    <button type="submit" class="btn-glow">Save Supplier</button>
                 </div>
             </form>
         </div>

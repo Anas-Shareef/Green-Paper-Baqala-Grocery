@@ -7,6 +7,9 @@ use App\Models\Product;
 use App\Models\StockCount;
 use App\Models\StockCountItem;
 use App\Models\StockMovement;
+use App\Models\StockReceipt;
+use App\Models\StockReceiptItem;
+use App\Models\Supplier;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -430,5 +433,350 @@ class InventoryService
                 'potential_margin' => round(max(0, $retail - $cost), 2),
             ];
         });
+    }
+
+    /**
+     * Create a new Stock Receipt / Goods Received Note (GRN).
+     * Draft by default without affecting stock quantity.
+     */
+    public function createStockReceipt(array $header, array $items, string $userName = 'Admin'): StockReceipt
+    {
+        return DB::transaction(function () use ($header, $items, $userName) {
+            $grnNumber = StockReceipt::generateNextGrnNumber();
+            $supplier = null;
+            $supplierName = $header['supplier_name_snapshot'] ?? null;
+
+            if (!empty($header['supplier_id'])) {
+                $supplier = Supplier::find($header['supplier_id']);
+                if ($supplier) {
+                    $supplierName = $supplier->name;
+                }
+            }
+
+            // Calculate totals server-side
+            $subtotal = 0.00;
+            $totalTax = 0.00;
+            $lineDiscount = 0.00;
+
+            $receipt = StockReceipt::create([
+                'grn_number' => $grnNumber,
+                'supplier_id' => $supplier?->id,
+                'supplier_name_snapshot' => $supplierName,
+                'supplier_invoice_number' => $header['supplier_invoice_number'] ?? null,
+                'invoice_date' => !empty($header['invoice_date']) ? Carbon::parse($header['invoice_date'])->format('Y-m-d') : null,
+                'purchase_reference' => $header['purchase_reference'] ?? null,
+                'receiving_date' => !empty($header['receiving_date']) ? Carbon::parse($header['receiving_date'])->format('Y-m-d') : Carbon::today()->format('Y-m-d'),
+                'status' => $header['status'] ?? 'draft',
+                'subtotal' => 0.00,
+                'discount' => (float) ($header['discount'] ?? 0.00),
+                'tax_amount' => 0.00,
+                'other_charges' => (float) ($header['other_charges'] ?? 0.00),
+                'total_amount' => 0.00,
+                'payment_status' => $header['payment_status'] ?? 'unpaid',
+                'notes' => $header['notes'] ?? null,
+                'attachment_url' => $header['attachment_url'] ?? null,
+                'created_by' => $userName,
+            ]);
+
+            foreach ($items as $item) {
+                $product = Product::findOrFail($item['product_id']);
+                $qtyExpected = (int) ($item['quantity_expected'] ?? $item['quantity_received'] ?? 1);
+                $qtyReceived = (int) ($item['quantity_received'] ?? 1);
+                $qtyDamaged = (int) ($item['quantity_damaged'] ?? 0);
+                $qtySellable = max(0, $qtyReceived - $qtyDamaged);
+
+                $unitCost = isset($item['unit_cost']) ? (float) $item['unit_cost'] : (float) $product->wholesale_cost;
+                $disc = (float) ($item['discount'] ?? 0.00);
+                $tax = (float) ($item['tax_amount'] ?? 0.00);
+                $itemSubtotal = round(max(0, ($qtyReceived * $unitCost) - $disc + $tax), 2);
+
+                $subtotal += ($qtyReceived * $unitCost);
+                $lineDiscount += $disc;
+                $totalTax += $tax;
+
+                StockReceiptItem::create([
+                    'stock_receipt_id' => $receipt->id,
+                    'product_id' => $product->id,
+                    'barcode' => $item['barcode'] ?? $product->barcode,
+                    'product_name' => $product->name,
+                    'quantity_expected' => $qtyExpected,
+                    'quantity_received' => $qtyReceived,
+                    'quantity_damaged' => $qtyDamaged,
+                    'quantity_sellable' => $qtySellable,
+                    'unit_cost' => $unitCost,
+                    'discount' => $disc,
+                    'tax_amount' => $tax,
+                    'subtotal' => $itemSubtotal,
+                    'batch_number' => $item['batch_number'] ?? null,
+                    'expiry_date' => !empty($item['expiry_date']) ? Carbon::parse($item['expiry_date'])->format('Y-m-d') : null,
+                    'notes' => $item['notes'] ?? null,
+                ]);
+            }
+
+            $headerDiscount = (float) ($header['discount'] ?? 0.00);
+            $otherCharges = (float) ($header['other_charges'] ?? 0.00);
+            $grandTotal = round(max(0, $subtotal - $lineDiscount - $headerDiscount + $totalTax + $otherCharges), 2);
+
+            $receipt->update([
+                'subtotal' => round($subtotal, 2),
+                'discount' => round($headerDiscount + $lineDiscount, 2),
+                'tax_amount' => round($totalTax, 2),
+                'total_amount' => $grandTotal,
+            ]);
+
+            return $receipt->load(['supplier', 'items.product']);
+        });
+    }
+
+    /**
+     * Update an unconfirmed Draft GRN.
+     */
+    public function updateStockReceipt(StockReceipt $receipt, array $header, array $items): StockReceipt
+    {
+        if ($receipt->status === 'received') {
+            throw new \InvalidArgumentException("Completed receipts are immutable and cannot be edited.");
+        }
+
+        return DB::transaction(function () use ($receipt, $header, $items) {
+            $supplierName = $header['supplier_name_snapshot'] ?? $receipt->supplier_name_snapshot;
+            if (!empty($header['supplier_id'])) {
+                $supplier = Supplier::find($header['supplier_id']);
+                if ($supplier) {
+                    $supplierName = $supplier->name;
+                }
+            }
+
+            $receipt->update([
+                'supplier_id' => $header['supplier_id'] ?? $receipt->supplier_id,
+                'supplier_name_snapshot' => $supplierName,
+                'supplier_invoice_number' => $header['supplier_invoice_number'] ?? $receipt->supplier_invoice_number,
+                'invoice_date' => !empty($header['invoice_date']) ? Carbon::parse($header['invoice_date'])->format('Y-m-d') : $receipt->invoice_date,
+                'purchase_reference' => $header['purchase_reference'] ?? $receipt->purchase_reference,
+                'receiving_date' => !empty($header['receiving_date']) ? Carbon::parse($header['receiving_date'])->format('Y-m-d') : $receipt->receiving_date,
+                'status' => $header['status'] ?? $receipt->status,
+                'payment_status' => $header['payment_status'] ?? $receipt->payment_status,
+                'notes' => $header['notes'] ?? $receipt->notes,
+                'attachment_url' => $header['attachment_url'] ?? $receipt->attachment_url,
+            ]);
+
+            // Replace items
+            $receipt->items()->delete();
+
+            $subtotal = 0.00;
+            $totalTax = 0.00;
+            $lineDiscount = 0.00;
+
+            foreach ($items as $item) {
+                $product = Product::findOrFail($item['product_id']);
+                $qtyExpected = (int) ($item['quantity_expected'] ?? $item['quantity_received'] ?? 1);
+                $qtyReceived = (int) ($item['quantity_received'] ?? 1);
+                $qtyDamaged = (int) ($item['quantity_damaged'] ?? 0);
+                $qtySellable = max(0, $qtyReceived - $qtyDamaged);
+
+                $unitCost = isset($item['unit_cost']) ? (float) $item['unit_cost'] : (float) $product->wholesale_cost;
+                $disc = (float) ($item['discount'] ?? 0.00);
+                $tax = (float) ($item['tax_amount'] ?? 0.00);
+                $itemSubtotal = round(max(0, ($qtyReceived * $unitCost) - $disc + $tax), 2);
+
+                $subtotal += ($qtyReceived * $unitCost);
+                $lineDiscount += $disc;
+                $totalTax += $tax;
+
+                StockReceiptItem::create([
+                    'stock_receipt_id' => $receipt->id,
+                    'product_id' => $product->id,
+                    'barcode' => $item['barcode'] ?? $product->barcode,
+                    'product_name' => $product->name,
+                    'quantity_expected' => $qtyExpected,
+                    'quantity_received' => $qtyReceived,
+                    'quantity_damaged' => $qtyDamaged,
+                    'quantity_sellable' => $qtySellable,
+                    'unit_cost' => $unitCost,
+                    'discount' => $disc,
+                    'tax_amount' => $tax,
+                    'subtotal' => $itemSubtotal,
+                    'batch_number' => $item['batch_number'] ?? null,
+                    'expiry_date' => !empty($item['expiry_date']) ? Carbon::parse($item['expiry_date'])->format('Y-m-d') : null,
+                    'notes' => $item['notes'] ?? null,
+                ]);
+            }
+
+            $headerDiscount = (float) ($header['discount'] ?? 0.00);
+            $otherCharges = (float) ($header['other_charges'] ?? 0.00);
+            $grandTotal = round(max(0, $subtotal - $lineDiscount - $headerDiscount + $totalTax + $otherCharges), 2);
+
+            $receipt->update([
+                'subtotal' => round($subtotal, 2),
+                'discount' => round($headerDiscount + $lineDiscount, 2),
+                'tax_amount' => round($totalTax, 2),
+                'other_charges' => round($otherCharges, 2),
+                'total_amount' => $grandTotal,
+            ]);
+
+            return $receipt->fresh(['supplier', 'items.product']);
+        });
+    }
+
+    /**
+     * Atomically Confirm a Stock Receipt (GRN).
+     * Commits quantities to physical stock, updates weighted average wholesale cost,
+     * updates expiry & supplier references, and generates immutable stock ledger movements.
+     */
+    public function confirmStockReceipt(int $receiptId, string $userName = 'Admin'): StockReceipt
+    {
+        return DB::transaction(function () use ($receiptId, $userName) {
+            $receipt = StockReceipt::lockForUpdate()->with('items')->findOrFail($receiptId);
+
+            if ($receipt->status === 'received') {
+                throw new \InvalidArgumentException("GRN {$receipt->grn_number} has already been confirmed and received.");
+            }
+
+            if ($receipt->status === 'cancelled') {
+                throw new \InvalidArgumentException("Cannot confirm cancelled receipt {$receipt->grn_number}.");
+            }
+
+            $supplierName = $receipt->supplier_name_snapshot ?? ($receipt->supplier?->name ?? 'Supplier');
+
+            foreach ($receipt->items as $item) {
+                $product = Product::lockForUpdate()->findOrFail($item->product_id);
+                $sellableQty = (int) $item->quantity_sellable;
+
+                if ($sellableQty <= 0) {
+                    continue;
+                }
+
+                $stockBefore = (int) $product->stock_quantity;
+                $stockAfter = $stockBefore + $sellableQty;
+
+                // Weighted Average Cost calculation
+                $unitCost = (float) $item->unit_cost;
+                if ($unitCost > 0 && $stockAfter > 0) {
+                    $currentTotal = $stockBefore * (float) $product->wholesale_cost;
+                    $incomingTotal = $sellableQty * $unitCost;
+                    $newAvgCost = round(($currentTotal + $incomingTotal) / $stockAfter, 2);
+                    $product->wholesale_cost = $newAvgCost;
+                }
+
+                if (!empty($supplierName)) {
+                    $product->supplier_name = $supplierName;
+                }
+
+                if (!empty($item->expiry_date)) {
+                    $product->expiry_date = $item->expiry_date;
+                }
+
+                $product->stock_quantity = $stockAfter;
+                $product->save();
+
+                // Append-only stock ledger movement
+                StockMovement::create([
+                    'product_id' => $product->id,
+                    'type' => 'Purchase',
+                    'quantity' => $sellableQty,
+                    'stock_before' => $stockBefore,
+                    'stock_after' => $stockAfter,
+                    'unit_cost' => $unitCost,
+                    'reference_type' => 'GRN',
+                    'reference_id' => $receipt->id,
+                    'reason' => "Stock Received via {$receipt->grn_number}" . ($receipt->supplier_invoice_number ? " (Inv #{$receipt->supplier_invoice_number})" : ''),
+                    'created_by' => $userName,
+                ]);
+            }
+
+            $receipt->update([
+                'status' => 'received',
+                'confirmed_by' => $userName,
+                'confirmed_at' => Carbon::now(),
+            ]);
+
+            return $receipt->fresh(['supplier', 'items.product']);
+        });
+    }
+
+    /**
+     * Cancel an unconfirmed Draft GRN.
+     */
+    public function cancelStockReceipt(int $receiptId, string $userName = 'Admin'): StockReceipt
+    {
+        $receipt = StockReceipt::findOrFail($receiptId);
+        if ($receipt->status === 'received') {
+            throw new \InvalidArgumentException("Completed receipts cannot be cancelled. Use Supplier Return to reverse received stock.");
+        }
+
+        $receipt->update([
+            'status' => 'cancelled',
+            'notes' => ($receipt->notes ? $receipt->notes . "\n" : "") . "Cancelled by {$userName} on " . Carbon::now()->toDateTimeString(),
+        ]);
+
+        return $receipt;
+    }
+
+    /**
+     * Supplier Return from completed GRN.
+     */
+    public function returnStockFromReceipt(int $receiptId, int $productId, int $quantity, string $reason, string $userName = 'Admin'): Product
+    {
+        if ($quantity <= 0) {
+            throw new \InvalidArgumentException("Return quantity must be greater than zero.");
+        }
+
+        return DB::transaction(function () use ($receiptId, $productId, $quantity, $reason, $userName) {
+            $receipt = StockReceipt::findOrFail($receiptId);
+            $product = Product::lockForUpdate()->findOrFail($productId);
+
+            $stockBefore = (int) $product->stock_quantity;
+            $stockAfter = max(0, $stockBefore - $quantity);
+
+            $product->stock_quantity = $stockAfter;
+            $product->save();
+
+            StockMovement::create([
+                'product_id' => $product->id,
+                'type' => 'Return',
+                'quantity' => -$quantity,
+                'stock_before' => $stockBefore,
+                'stock_after' => $stockAfter,
+                'unit_cost' => (float) $product->wholesale_cost,
+                'reference_type' => 'GRN',
+                'reference_id' => $receipt->id,
+                'reason' => "Supplier Return: {$reason} (Ref: {$receipt->grn_number})",
+                'created_by' => $userName,
+            ]);
+
+            return $product;
+        });
+    }
+
+    /**
+     * Get KPI Summary for Stock Receiving Dashboard.
+     */
+    public function getReceivingKPIs(): array
+    {
+        $today = Carbon::today()->format('Y-m-d');
+        $startOfMonth = Carbon::now()->startOfMonth()->format('Y-m-d');
+
+        $draftCount = StockReceipt::where('status', 'draft')->count();
+        $pendingCount = StockReceipt::where('status', 'pending_review')->count();
+
+        $receivedTodayQuery = StockReceipt::where('status', 'received')
+            ->whereDate('receiving_date', $today);
+
+        $receivedTodayCount = $receivedTodayQuery->count();
+        $receivedTodayValue = (float) $receivedTodayQuery->sum('total_amount');
+
+        $monthQuery = StockReceipt::where('status', 'received')
+            ->whereDate('receiving_date', '>=', $startOfMonth);
+
+        $monthCount = $monthQuery->count();
+        $monthTotalValue = (float) $monthQuery->sum('total_amount');
+
+        return [
+            'draft_count' => $draftCount,
+            'pending_count' => $pendingCount,
+            'received_today_count' => $receivedTodayCount,
+            'received_today_value' => round($receivedTodayValue, 2),
+            'month_receipts_count' => $monthCount,
+            'month_total_value' => round($monthTotalValue, 2),
+        ];
     }
 }

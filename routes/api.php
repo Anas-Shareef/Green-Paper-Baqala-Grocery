@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\v1\Admin\AdminExpenseController;
 use App\Http\Controllers\Api\v1\Admin\AdminInventoryController;
 use App\Http\Controllers\Api\v1\Admin\AdminOrderController;
 use App\Http\Controllers\Api\v1\Admin\AdminProductController;
+use App\Http\Controllers\Api\v1\Admin\AdminReceivingController;
 use App\Http\Controllers\Api\v1\Admin\AdminReportController;
 use App\Http\Controllers\Api\v1\AuthController;
 use App\Http\Controllers\Api\v1\CustomerAddressController;
@@ -82,6 +83,22 @@ Route::prefix('v1')->group(function () {
         Route::post('/inventory/counts/{id}/approve', [AdminInventoryController::class, 'approveCount']);
         Route::get('/inventory/{id}', [AdminInventoryController::class, 'show']);
         Route::post('/inventory/adjustments', [AdminInventoryController::class, 'adjustStock']);
+
+        // Stock Receiving Station & Goods Received Note (GRN) Routes
+        Route::get('/receiving', [AdminReceivingController::class, 'index']);
+        Route::get('/receiving/kpis', [AdminReceivingController::class, 'kpis']);
+        Route::get('/receiving/suppliers', [AdminReceivingController::class, 'suppliers']);
+        Route::post('/receiving/suppliers', [AdminReceivingController::class, 'storeSupplier']);
+        Route::post('/receiving/quick-product', [AdminReceivingController::class, 'quickCreateProduct']);
+        Route::post('/receiving', [AdminReceivingController::class, 'store']);
+        Route::get('/receiving/{id}', [AdminReceivingController::class, 'show']);
+        Route::put('/receiving/{id}', [AdminReceivingController::class, 'update']);
+        Route::post('/receiving/{id}/confirm', [AdminReceivingController::class, 'confirm']);
+        Route::post('/receiving/{id}/cancel', [AdminReceivingController::class, 'cancel']);
+        Route::post('/receiving/{id}/return', [AdminReceivingController::class, 'returnStock']);
+
+        // Barcode Quick Lookup (Datalogic QuickScan Lite)
+        Route::get('/products/barcode/{barcode}', [AdminReceivingController::class, 'barcodeLookup']);
 
         Route::get('/orders', [AdminOrderController::class, 'index']);
         Route::get('/orders/export', [AdminOrderController::class, 'export']);

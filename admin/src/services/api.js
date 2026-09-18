@@ -227,4 +227,54 @@ export const adminApi = {
     const res = await client.post(`${getApiBaseUrl()}/admin/push-subscriptions`, payload);
     return res.data;
   },
+
+  // Stock Receiving Station / Goods Received Note (GRN) API
+  getReceivingHistory: async (params = {}) => {
+    const res = await client.get(`${getApiBaseUrl()}/admin/receiving`, { params });
+    return res.data;
+  },
+  getReceivingKPIs: async () => {
+    const res = await client.get(`${getApiBaseUrl()}/admin/receiving/kpis`);
+    return res.data;
+  },
+  getReceivingDetails: async (id) => {
+    const res = await client.get(`${getApiBaseUrl()}/admin/receiving/${id}`);
+    return res.data;
+  },
+  createReceiving: async (payload) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/receiving`, payload);
+    return res.data;
+  },
+  updateReceiving: async (id, payload) => {
+    const res = await client.put(`${getApiBaseUrl()}/admin/receiving/${id}`, payload);
+    return res.data;
+  },
+  confirmReceiving: async (id) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/receiving/${id}/confirm`);
+    return res.data;
+  },
+  cancelReceiving: async (id) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/receiving/${id}/cancel`);
+    return res.data;
+  },
+  returnReceivingStock: async (id, payload) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/receiving/${id}/return`, payload);
+    return res.data;
+  },
+  getSuppliers: async (params = {}) => {
+    const res = await client.get(`${getApiBaseUrl()}/admin/receiving/suppliers`, { params });
+    return res.data;
+  },
+  createSupplier: async (payload) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/receiving/suppliers`, payload);
+    return res.data;
+  },
+  lookupBarcode: async (barcode) => {
+    const res = await client.get(`${getApiBaseUrl()}/admin/products/barcode/${encodeURIComponent(barcode)}`);
+    return res.data;
+  },
+  quickCreateProduct: async (payload) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/receiving/quick-product`, payload);
+    return res.data;
+  },
 };

@@ -2,127 +2,314 @@
 
 namespace App\Livewire\Admin;
 
+use App\Models\Category;
 use App\Models\Product;
 use App\Models\StockMovement;
+use App\Models\StockReceipt;
+use App\Models\StockReceiptItem;
+use App\Models\Supplier;
 use App\Services\InventoryService;
 use Livewire\Component;
 
 class StockReceiving extends Component
 {
-    public string $barcodeInput = '';
-    public ?int $selectedProductId = null;
-    public ?Product $selectedProduct = null;
-    public int $receivingQuantity = 10;
-    public string $reason = 'Stock Purchase Receiving';
+    // Mode
+    public string $viewMode = 'station'; // station or history
 
+    // Session State
+    public ?int $currentReceiptId = null;
+    public string $grnNumber = 'GRN-NEW';
+    public ?int $supplierId = null;
+    public string $supplierInvoiceNumber = '';
+    public string $invoiceDate = '';
+    public string $purchaseReference = '';
+    public string $receivingDate = '';
+    public string $status = 'draft';
+    public float $discount = 0.00;
+    public float $otherCharges = 0.00;
+    public string $paymentStatus = 'unpaid';
+    public string $notes = '';
+
+    // Items list
+    public array $items = [];
+
+    // Scanner
+    public string $barcodeInput = '';
+    public string $scannerStatus = 'READY';
+    public string $lastScannedBarcode = '';
+    public ?int $flashProductId = null;
+
+    // Modals
     public bool $showUnknownModal = false;
-    public string $newBarcode = '';
-    public string $newName = '';
+    public string $unknownBarcode = '';
+    public string $newProductName = '';
     public float $newRetailPrice = 0.00;
     public float $newWholesaleCost = 0.00;
+    public string $newUnit = 'piece';
+
+    public bool $showSupplierModal = false;
+    public string $newSupplierName = '';
+    public string $newSupplierPhone = '';
+    public string $newSupplierTax = '';
+
+    public bool $showConfirmModal = false;
+
+    // View GRN details
+    public ?StockReceipt $viewingReceipt = null;
+
+    public function mount()
+    {
+        $this->invoiceDate = date('Y-m-d');
+        $this->receivingDate = date('Y-m-d');
+    }
 
     public function scanBarcode()
     {
-        $barcode = trim($this->barcodeInput);
+        $code = trim($this->barcodeInput);
         $this->barcodeInput = '';
 
-        if (empty($barcode)) {
+        if (empty($code)) {
             return;
         }
 
-        $product = Product::where('barcode', $barcode)->first();
+        $this->lastScannedBarcode = $code;
+
+        // Check if barcode already exists in current items
+        foreach ($this->items as $index => $item) {
+            if ($item['barcode'] === $code) {
+                // REPEATED SCAN: increment in place!
+                $this->items[$index]['quantity_received'] += 1;
+                $this->items[$index]['quantity_sellable'] = max(0, $this->items[$index]['quantity_received'] - $this->items[$index]['quantity_damaged']);
+                $this->recalculateLine($index);
+                $this->scannerStatus = 'INCREMENTED';
+                $this->flashProductId = $item['product_id'];
+                return;
+            }
+        }
+
+        // Lookup product by barcode
+        $product = Product::where('barcode', $code)->first();
 
         if ($product) {
-            $this->selectedProductId = $product->id;
-            $this->selectedProduct = $product;
-            session()->flash('info', "Product '{$product->name}' scanned. Enter received quantity below.");
+            $unitCost = (float) $product->wholesale_cost;
+            $taxAmt = round($unitCost * 0.05, 2);
+
+            $this->items[] = [
+                'product_id' => $product->id,
+                'barcode' => $product->barcode,
+                'product_name' => $product->name,
+                'sku' => $product->sku ?? ('SKU-' . $product->id),
+                'unit' => $product->unit ?? 'piece',
+                'quantity_expected' => 1,
+                'quantity_received' => 1,
+                'quantity_damaged' => 0,
+                'quantity_sellable' => 1,
+                'unit_cost' => $unitCost,
+                'discount' => 0.00,
+                'tax_amount' => $taxAmt,
+                'subtotal' => round($unitCost + $taxAmt, 2),
+                'expiry_date' => $product->expiry_date ? $product->expiry_date->format('Y-m-d') : '',
+                'batch_number' => '',
+                'notes' => '',
+            ];
+
+            $this->scannerStatus = 'FOUND';
+            $this->flashProductId = $product->id;
         } else {
-            $this->newBarcode = $barcode;
+            $this->scannerStatus = 'NOT_FOUND';
+            $this->unknownBarcode = $code;
             $this->showUnknownModal = true;
         }
     }
 
-    public function selectProduct(int $id)
+    public function recalculateLine(int $index)
     {
-        $product = Product::findOrFail($id);
-        $this->selectedProductId = $product->id;
-        $this->selectedProduct = $product;
+        if (!isset($this->items[$index])) return;
+
+        $item = &$this->items[$index];
+        $qty = (int) $item['quantity_received'];
+        $damaged = (int) $item['quantity_damaged'];
+        $item['quantity_sellable'] = max(0, $qty - $damaged);
+
+        $cost = (float) $item['unit_cost'];
+        $disc = (float) $item['discount'];
+        $tax = (float) $item['tax_amount'];
+
+        $item['subtotal'] = round(max(0, ($qty * $cost) - $disc + $tax), 2);
     }
 
-    public function submitReceiving(InventoryService $inventoryService)
+    public function removeItem(int $index)
     {
-        if (!$this->selectedProduct) {
-            session()->flash('error', "Please select or scan a product first.");
+        unset($this->items[$index]);
+        $this->items = array_values($this->items);
+    }
+
+    public function saveDraft(InventoryService $inventoryService)
+    {
+        if (empty($this->items)) {
+            session()->flash('error', 'Please scan or add at least one product before saving.');
             return;
         }
 
-        $this->validate([
-            'receivingQuantity' => 'required|integer|min:1',
-            'reason' => 'required|string|min:3',
-        ]);
-
         try {
-            $product = $inventoryService->receiveStock(
-                $this->selectedProduct->id,
-                $this->receivingQuantity,
-                $this->reason,
-                auth()->user()?->name ?? 'Admin'
-            );
+            $header = [
+                'supplier_id' => $this->supplierId,
+                'supplier_invoice_number' => $this->supplierInvoiceNumber,
+                'invoice_date' => $this->invoiceDate,
+                'purchase_reference' => $this->purchaseReference,
+                'receiving_date' => $this->receivingDate,
+                'status' => 'draft',
+                'discount' => $this->discount,
+                'other_charges' => $this->otherCharges,
+                'payment_status' => $this->paymentStatus,
+                'notes' => $this->notes,
+            ];
 
-            session()->flash('message', "Successfully received +{$this->receivingQuantity} units of '{$product->name}'. New Stock: {$product->stock_quantity}.");
-            $this->selectedProduct = Product::find($product->id);
-            $this->receivingQuantity = 10;
+            if ($this->currentReceiptId) {
+                $receipt = StockReceipt::findOrFail($this->currentReceiptId);
+                $receipt = $inventoryService->updateStockReceipt($receipt, $header, $this->items);
+            } else {
+                $receipt = $inventoryService->createStockReceipt($header, $this->items, auth()->user()?->name ?? 'Admin');
+                $this->currentReceiptId = $receipt->id;
+                $this->grnNumber = $receipt->grn_number;
+            }
+
+            session()->flash('message', "Draft {$receipt->grn_number} saved. Stock remains unchanged until confirmed.");
         } catch (\Exception $e) {
             session()->flash('error', $e->getMessage());
         }
     }
 
-    public function saveUnknownProduct()
+    public function confirmReceipt(InventoryService $inventoryService)
+    {
+        if (empty($this->items)) {
+            session()->flash('error', 'Cannot confirm an empty receipt.');
+            return;
+        }
+
+        try {
+            if (!$this->currentReceiptId) {
+                $header = [
+                    'supplier_id' => $this->supplierId,
+                    'supplier_invoice_number' => $this->supplierInvoiceNumber,
+                    'invoice_date' => $this->invoiceDate,
+                    'purchase_reference' => $this->purchaseReference,
+                    'receiving_date' => $this->receivingDate,
+                    'status' => 'draft',
+                    'discount' => $this->discount,
+                    'other_charges' => $this->otherCharges,
+                    'payment_status' => $this->paymentStatus,
+                    'notes' => $this->notes,
+                ];
+                $receipt = $inventoryService->createStockReceipt($header, $this->items, auth()->user()?->name ?? 'Admin');
+                $this->currentReceiptId = $receipt->id;
+            }
+
+            $confirmed = $inventoryService->confirmStockReceipt($this->currentReceiptId, auth()->user()?->name ?? 'Admin');
+            $this->status = 'received';
+            $this->showConfirmModal = false;
+
+            session()->flash('message', "GRN {$confirmed->grn_number} successfully confirmed! Received stock committed to physical inventory.");
+        } catch (\Exception $e) {
+            session()->flash('error', $e->getMessage());
+        }
+    }
+
+    public function createUnknownProduct()
     {
         $this->validate([
-            'newBarcode' => 'required|string',
-            'newName' => 'required|string|max:255',
-            'newRetailPrice' => 'required|numeric|min:0',
+            'unknownBarcode' => 'required|string|unique:products,barcode',
+            'newProductName' => 'required|string|max:255',
             'newWholesaleCost' => 'required|numeric|min:0',
-            'receivingQuantity' => 'required|integer|min:1',
+            'newRetailPrice' => 'required|numeric|min:0',
         ]);
 
         $product = Product::create([
-            'barcode' => $this->newBarcode,
-            'name' => $this->newName,
-            'category_id' => \App\Models\Category::first()?->id ?? 1,
-            'retail_price' => $this->newRetailPrice,
+            'barcode' => $this->unknownBarcode,
+            'name' => $this->newProductName,
+            'category_id' => Category::first()?->id ?? 1,
+            'unit' => $this->newUnit,
             'wholesale_cost' => $this->newWholesaleCost,
-            'stock_quantity' => $this->receivingQuantity,
+            'retail_price' => $this->newRetailPrice,
+            'stock_quantity' => 0,
+            'minimum_stock_level' => 5,
             'status' => 'active',
         ]);
 
-        StockMovement::create([
+        $taxAmt = round($this->newWholesaleCost * 0.05, 2);
+        $this->items[] = [
             'product_id' => $product->id,
-            'type' => 'Purchase',
-            'quantity' => $this->receivingQuantity,
-            'stock_before' => 0,
-            'stock_after' => $this->receivingQuantity,
-            'reference_type' => 'Receiving',
-            'reason' => $this->reason,
-            'created_by' => auth()->user()?->name ?? 'Admin',
-        ]);
+            'barcode' => $product->barcode,
+            'product_name' => $product->name,
+            'sku' => $product->sku ?? ('SKU-' . $product->id),
+            'unit' => $product->unit,
+            'quantity_expected' => 1,
+            'quantity_received' => 1,
+            'quantity_damaged' => 0,
+            'quantity_sellable' => 1,
+            'unit_cost' => $this->newWholesaleCost,
+            'discount' => 0.00,
+            'tax_amount' => $taxAmt,
+            'subtotal' => round($this->newWholesaleCost + $taxAmt, 2),
+            'expiry_date' => '',
+            'batch_number' => '',
+            'notes' => '',
+        ];
 
         $this->showUnknownModal = false;
-        $this->selectedProductId = $product->id;
-        $this->selectedProduct = $product;
-        session()->flash('message', "New product '{$product->name}' created with initial received stock of {$this->receivingQuantity}.");
+        $this->newProductName = '';
+        $this->newWholesaleCost = 0.00;
+        $this->newRetailPrice = 0.00;
+
+        session()->flash('message', "Product '{$product->name}' created and added to receiving cart.");
     }
 
-    public function render()
+    public function createQuickSupplier()
     {
+        $this->validate([
+            'newSupplierName' => 'required|string|max:255|unique:suppliers,name',
+        ]);
+
+        $supplier = Supplier::create([
+            'name' => $this->newSupplierName,
+            'phone' => $this->newSupplierPhone,
+            'tax_number' => $this->newSupplierTax,
+            'status' => 'active',
+        ]);
+
+        $this->supplierId = $supplier->id;
+        $this->showSupplierModal = false;
+        $this->newSupplierName = '';
+        $this->newSupplierPhone = '';
+        $this->newSupplierTax = '';
+
+        session()->flash('message', "Supplier '{$supplier->name}' created.");
+    }
+
+    public function resetSession()
+    {
+        $this->currentReceiptId = null;
+        $this->grnNumber = 'GRN-NEW';
+        $this->status = 'draft';
+        $this->supplierId = null;
+        $this->supplierInvoiceNumber = '';
+        $this->purchaseReference = '';
+        $this->notes = '';
+        $this->discount = 0.00;
+        $this->otherCharges = 0.00;
+        $this->items = [];
+    }
+
+    public function render(InventoryService $inventoryService)
+    {
+        $kpis = $inventoryService->getReceivingKPIs();
+        $suppliers = Supplier::orderBy('name')->get();
+        $history = StockReceipt::with(['supplier', 'items'])->orderBy('id', 'desc')->paginate(15);
+
         return view('livewire.admin.stock-receiving', [
-            'recentReceivings' => StockMovement::with('product')
-                ->where('type', 'Purchase')
-                ->orderBy('id', 'desc')
-                ->limit(15)
-                ->get(),
-            'productsList' => Product::where('status', 'active')->orderBy('name')->get(),
-        ])->layout('components.layouts.app', ['title' => 'Baqqala Admin — Stock Receiving Workflow']);
+            'kpis' => $kpis,
+            'suppliers' => $suppliers,
+            'history' => $history,
+        ])->layout('components.layouts.app', ['title' => 'Baqqala Admin — Stock Receiving Station']);
     }
 }
