@@ -36,6 +36,22 @@ Route::get('/assets/{file}', function (string $file) {
     ]);
 })->where('file', '.*')->name('admin.assets');
 
+Route::get('/admin-manifest.json', function () {
+    $path = public_path('admin-manifest.json');
+    if (!file_exists($path)) {
+        $alt = base_path('admin-manifest.json');
+        if (file_exists($alt)) {
+            $path = $alt;
+        } else {
+            abort(404);
+        }
+    }
+    return response()->file($path, [
+        'Content-Type' => 'application/json',
+        'Cache-Control' => 'no-cache, private',
+    ]);
+});
+
 Route::get('/', function () {
     if (Auth::check()) {
         return redirect('/admin/dashboard');

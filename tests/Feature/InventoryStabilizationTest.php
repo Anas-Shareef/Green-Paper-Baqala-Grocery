@@ -280,4 +280,11 @@ class InventoryStabilizationTest extends TestCase
             ]
         ]);
     }
+
+    public function test_assets_can_be_retrieved()
+    {
+        $res = $this->get('/assets/index-DutNN4xF.css');
+        $res->assertStatus(200);
+        $this->assertStringContainsString('text/css', $res->headers->get('Content-Type'));
+    }
 }
