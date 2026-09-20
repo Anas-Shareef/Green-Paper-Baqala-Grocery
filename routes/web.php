@@ -16,6 +16,21 @@ use App\Services\PdfInvoiceService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
+Route::get('/assets/{file}', function (string $file) {
+    $path = public_path('assets/' . $file);
+    if (!file_exists($path)) {
+        abort(404);
+    }
+    $mime = str_ends_with($file, '.css')
+        ? 'text/css'
+        : (str_ends_with($file, '.js') ? 'application/javascript' : (mime_content_type($path) ?: 'application/octet-stream'));
+
+    return response()->file($path, [
+        'Content-Type' => $mime,
+        'Cache-Control' => 'public, max-age=31536000, immutable',
+    ]);
+})->where('file', '.*')->name('admin.assets');
+
 Route::get('/', function () {
     if (Auth::check()) {
         return redirect('/admin/dashboard');

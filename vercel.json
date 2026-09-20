@@ -3,17 +3,39 @@
   "outputDirectory": "public",
   "builds": [
     {
+      "src": "public/**",
+      "use": "@vercel/static"
+    },
+    {
       "src": "api/index.php",
       "use": "vercel-php"
     }
   ],
-  "rewrites": [
-    { "source": "/favicon.ico", "destination": "/favicon.ico" },
-    { "source": "/robots.txt", "destination": "/robots.txt" },
-    { "source": "/build/(.*)", "destination": "/build/$1" },
-    { "source": "/assets/(.*)", "destination": "/assets/$1" },
-    { "source": "/api/(.*)", "destination": "/api/index.php" },
-    { "source": "/(.*)", "destination": "/api/index.php" }
+  "routes": [
+    {
+      "src": "/assets/(.*)",
+      "dest": "/public/assets/$1"
+    },
+    {
+      "src": "/build/(.*)",
+      "dest": "/public/build/$1"
+    },
+    {
+      "src": "/favicon.ico",
+      "dest": "/public/favicon.ico"
+    },
+    {
+      "src": "/robots.txt",
+      "dest": "/public/robots.txt"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.php"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/index.php"
+    }
   ],
   "env": {
     "PHP_VERSION": "8.3",

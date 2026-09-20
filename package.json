@@ -3,8 +3,8 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "vite build",
-        "dev": "vite"
+        "build": "npm --prefix admin run build && node scripts/sync-admin-assets.js",
+        "dev": "npm --prefix admin run dev"
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",
