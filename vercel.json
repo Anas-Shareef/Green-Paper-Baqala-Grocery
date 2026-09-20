@@ -1,20 +1,20 @@
 {
   "version": 2,
-  "functions": {
-    "api/*.php": {
-      "runtime": "vercel-php@0.9.0",
-      "includeFiles": "public/**"
-    }
-  },
-  "routes": [
+  "outputDirectory": "public",
+  "builds": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/index.php"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/api/index.php"
+      "src": "api/index.php",
+      "use": "vercel-php"
     }
+  ],
+  "rewrites": [
+    { "source": "/favicon.ico", "destination": "/favicon.ico" },
+    { "source": "/robots.txt", "destination": "/robots.txt" },
+    { "source": "/admin-manifest.json", "destination": "/admin-manifest.json" },
+    { "source": "/build/(.*)", "destination": "/build/$1" },
+    { "source": "/assets/(.*)", "destination": "/assets/$1" },
+    { "source": "/api/(.*)", "destination": "/api/index.php" },
+    { "source": "/(.*)", "destination": "/api/index.php" }
   ],
   "env": {
     "PHP_VERSION": "8.3",
