@@ -15,7 +15,7 @@
       }
       @endif
     </script>
-    <script type="module" crossorigin src="/assets/index-DbjD9i4E.js"></script>
+    <script type="module" crossorigin src="/assets/index-CxHAUFkb.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-mvJfxxa_.css">
   </head>
   <body class="h-full bg-white text-slate-900 font-sans antialiased overflow-x-hidden">

@@ -130,7 +130,7 @@ export function DashboardPage() {
             </h2>
           </div>
           <button
-            onClick={() => navigate('/orders')}
+            onClick={() => navigate('/admin/orders')}
             className="text-xs text-emerald-700 font-bold hover:underline flex items-center gap-1"
           >
             View All Orders <ArrowRight className="w-3.5 h-3.5" />

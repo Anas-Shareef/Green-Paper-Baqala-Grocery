@@ -53,26 +53,26 @@ export function ReportsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Revenue</span>
-              <div className="text-2xl font-bold text-emerald-400">${summary.total_revenue?.toFixed(2)}</div>
+              <div className="text-2xl font-bold text-emerald-400">AED {summary.total_revenue?.toFixed(2)}</div>
               <p className="text-xs text-slate-500">{summary.total_orders} total orders</p>
             </div>
 
             <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Expenses</span>
-              <div className="text-2xl font-bold text-rose-400">${summary.total_expenses?.toFixed(2)}</div>
+              <div className="text-2xl font-bold text-rose-400">AED {summary.total_expenses?.toFixed(2)}</div>
               <p className="text-xs text-slate-500">Recorded operating costs</p>
             </div>
 
             <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Estimated COGS</span>
-              <div className="text-2xl font-bold text-amber-400">${summary.estimated_cogs?.toFixed(2)}</div>
+              <div className="text-2xl font-bold text-amber-400">AED {summary.estimated_cogs?.toFixed(2)}</div>
               <p className="text-xs text-slate-500">Cost of goods sold</p>
             </div>
 
             <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Net Profit</span>
               <div className={`text-2xl font-bold ${summary.net_profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                ${summary.net_profit?.toFixed(2)}
+                AED {summary.net_profit?.toFixed(2)}
               </div>
               <p className="text-xs text-slate-500">Final profit figure</p>
             </div>
@@ -94,7 +94,7 @@ export function ReportsPage() {
                     <tr key={idx} className="hover:bg-slate-800/30">
                       <td className="px-4 py-3 font-semibold text-white">{item.product_name}</td>
                       <td className="px-4 py-3 text-slate-300">{item.total_qty} units</td>
-                      <td className="px-4 py-3 font-bold text-emerald-400">${parseFloat(item.total_sales).toFixed(2)}</td>
+                      <td className="px-4 py-3 font-bold text-emerald-400">AED {parseFloat(item.total_sales).toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>

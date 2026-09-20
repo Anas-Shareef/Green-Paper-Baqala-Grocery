@@ -85,7 +85,7 @@ export function ExpensesPage() {
       <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between">
         <div>
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Recorded Expenses</span>
-          <div className="text-3xl font-bold text-rose-400">${meta.total_amount?.toFixed(2) || '0.00'}</div>
+          <div className="text-3xl font-bold text-rose-400">AED {meta.total_amount?.toFixed(2) || '0.00'}</div>
         </div>
       </div>
 
@@ -121,7 +121,7 @@ export function ExpensesPage() {
                     <td className="px-4 py-3.5 text-slate-300">{e.category?.name || 'General'}</td>
                     <td className="px-4 py-3.5 text-slate-400">{e.expense_date}</td>
                     <td className="px-4 py-3.5 uppercase text-xs font-medium text-slate-400">{e.payment_method}</td>
-                    <td className="px-4 py-3.5 font-bold text-rose-400">${parseFloat(e.amount).toFixed(2)}</td>
+                    <td className="px-4 py-3.5 font-bold text-rose-400">AED {parseFloat(e.amount).toFixed(2)}</td>
                     <td className="px-4 py-3.5 text-right">
                       <button onClick={() => handleDelete(e.id)} className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg">
                         <Trash2 className="w-4 h-4" />
