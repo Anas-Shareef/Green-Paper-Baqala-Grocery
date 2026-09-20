@@ -26,6 +26,7 @@ class HealthController extends BaseApiController
                 'database_driver' => $driver,
                 'database_name' => $databaseName ?: 'baqqala',
                 'timestamp' => now()->toIso8601String(),
+                'version' => '3bf06f6-inventory-stabilized',
             ], 'Database connection health check passed');
 
         } catch (Throwable $e) {
