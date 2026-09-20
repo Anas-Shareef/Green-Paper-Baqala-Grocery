@@ -115,14 +115,14 @@ Route::prefix('v1')->group(function () {
         Route::post('/orders/import', [AdminOrderController::class, 'import']);
         Route::post('/orders/bulk-action', [AdminOrderController::class, 'bulkAction']);
         Route::get('/orders/{id}', [AdminOrderController::class, 'show']);
-        Route::put('/orders/{id}/status', [AdminOrderController::class, 'updateStatus']);
+        Route::match(['put', 'patch'], '/orders/{id}/status', [AdminOrderController::class, 'updateStatus']);
         Route::post('/orders/{id}/confirm', [AdminOrderController::class, 'confirm']);
         Route::post('/orders/{id}/prepare', [AdminOrderController::class, 'prepare']);
         Route::post('/orders/{id}/ready', [AdminOrderController::class, 'ready']);
         Route::post('/orders/{id}/assign-driver', [AdminOrderController::class, 'assignDriver']);
         Route::post('/orders/{id}/dispatch', [AdminOrderController::class, 'dispatch']);
         Route::post('/orders/{id}/deliver', [AdminOrderController::class, 'deliver']);
-        Route::post('/orders/{id}/payment', [AdminOrderController::class, 'payment']);
+        Route::match(['post', 'patch'], '/orders/{id}/payment', [AdminOrderController::class, 'payment']);
         Route::post('/orders/{id}/fail-delivery', [AdminOrderController::class, 'failDelivery']);
         Route::post('/orders/{id}/cancel', [AdminOrderController::class, 'cancel']);
         Route::post('/orders/{id}/pick-item', [AdminOrderController::class, 'pickItem']);

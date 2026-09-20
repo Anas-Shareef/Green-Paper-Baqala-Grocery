@@ -188,39 +188,62 @@ class AdminOrderController extends BaseApiController
         $newStatus = $request->input('status');
         $actor = auth()->user();
 
-        switch ($newStatus) {
-            case 'confirmed':
-            case 'accepted':
-                $this->orderService->confirmOrder($order, $actor);
-                break;
-            case 'preparing':
-                $this->orderService->startPreparing($order, $actor);
-                break;
-            case 'ready':
-                $this->orderService->markReady($order, $actor);
-                break;
-            case 'out_for_delivery':
-                $this->orderService->dispatchOrder($order, null, null, $actor);
-                break;
-            case 'delivered':
-                $this->orderService->deliverOrder($order, $actor);
-                break;
-            case 'cancelled':
-                $this->orderService->cancelOrder($order, $request->input('reason', 'Cancelled from Admin API'), $actor);
-                break;
-            case 'expired':
-                $this->orderService->expireOrder($order, $actor);
-                break;
-            case 'failed_delivery':
-                $this->orderService->failDelivery($order, $request->input('reason', 'Customer unreachable'), null, $actor);
-                break;
+        // Enforce transition matrix validation
+        try {
+            $this->orderService->validateTransition($order, $newStatus);
+        } catch (\InvalidArgumentException $e) {
+            return $this->errorResponse($e->getMessage(), ['status' => [$e->getMessage()]], 422);
         }
 
-        if ($request->has('payment_status')) {
-            $order->update(['payment_status' => $request->input('payment_status')]);
+        // Enforce mandatory reason for cancellation and failed delivery
+        if (in_array($newStatus, ['cancelled', 'failed_delivery'], true)) {
+            $reason = trim((string) ($request->input('reason') ?: $request->input('cancellation_reason') ?: $request->input('notes') ?: ''));
+            if (empty($reason)) {
+                return $this->errorResponse("A valid reason is required for status '{$newStatus}'.", [
+                    'reason' => ["A valid reason is required for status '{$newStatus}'."]
+                ], 422);
+            }
         }
 
-        return $this->successResponse($order->fresh(['items', 'customer', 'deliveryStaff']), 'Order status updated successfully');
+        try {
+            switch ($newStatus) {
+                case 'confirmed':
+                case 'accepted':
+                    $this->orderService->confirmOrder($order, $actor);
+                    break;
+                case 'preparing':
+                    $this->orderService->startPreparing($order, $actor);
+                    break;
+                case 'ready':
+                    $this->orderService->markReady($order, $actor);
+                    break;
+                case 'out_for_delivery':
+                    $this->orderService->dispatchOrder($order, null, null, $actor);
+                    break;
+                case 'delivered':
+                    $this->orderService->deliverOrder($order, $actor);
+                    break;
+                case 'cancelled':
+                    $this->orderService->cancelOrder($order, $reason, $actor);
+                    break;
+                case 'expired':
+                    $this->orderService->expireOrder($order, $actor);
+                    break;
+                case 'failed_delivery':
+                    $this->orderService->failDelivery($order, $reason, $request->input('notes'), $actor);
+                    break;
+            }
+
+            if ($request->has('payment_status')) {
+                $order->update(['payment_status' => $request->input('payment_status')]);
+            }
+
+            return $this->successResponse($order->fresh(['items', 'customer', 'deliveryStaff', 'statusHistory', 'activities']), 'Order status updated successfully');
+        } catch (\InvalidArgumentException $e) {
+            return $this->errorResponse($e->getMessage(), ['status' => [$e->getMessage()]], 422);
+        } catch (\Throwable $e) {
+            return $this->errorResponse('Failed to update order status: ' . $e->getMessage(), [], 400);
+        }
     }
 
     public function bulkAction(Request $request): JsonResponse

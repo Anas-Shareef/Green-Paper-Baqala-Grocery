@@ -44,6 +44,11 @@ export const CheckoutPage = ({ cart, customer, onOrderSuccess, onBackToCart }) =
   const [error, setError] = useState(null);
   const [orderCreatedData, setOrderCreatedData] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [activeIdempotencyKey, setActiveIdempotencyKey] = useState(() => {
+    return typeof crypto !== 'undefined' && crypto.randomUUID 
+      ? `chk-${crypto.randomUUID()}` 
+      : `chk-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  });
 
   // Authoritative client subtotal display (AED)
   const subtotal = cart.reduce((acc, item) => acc + (parseFloat(item.product.sale_price || item.product.retail_price || item.product.price || 0) * item.quantity), 0);
@@ -80,12 +85,14 @@ export const CheckoutPage = ({ cart, customer, onOrderSuccess, onBackToCart }) =
 
     try {
       const res = await api.recognizeCustomer(norm);
-      if (res && res.customer_exists) {
+      if (res && (res.recognized || res.customer_exists)) {
         setRecognitionStatus('recognized');
         setRecognizedCustomer(res.customer);
         setSavedAddresses(res.addresses || []);
 
-        if (res.addresses && res.addresses.length > 0) {
+        if (res.default_address) {
+          setSelectedAddressId(res.default_address.id);
+        } else if (res.addresses && res.addresses.length > 0) {
           const defaultAddr = res.addresses.find(a => a.is_default) || res.addresses[0];
           setSelectedAddressId(defaultAddr.id);
         }
@@ -172,12 +179,7 @@ export const CheckoutPage = ({ cart, customer, onOrderSuccess, onBackToCart }) =
     setLoading(true);
     setError(null);
 
-    // Generate Client Idempotency Key
-    const idempotencyKey = typeof crypto !== 'undefined' && crypto.randomUUID 
-      ? `chk-${crypto.randomUUID()}` 
-      : `chk-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-
-    // Prepare Canonical Request Payload
+    // Prepare Canonical Request Payload with stable idempotency key
     const normPhone = normalizedPhone || normalizePhoneNumber(phoneInput);
     const payload = {
       customer_name: targetName,
@@ -189,7 +191,7 @@ export const CheckoutPage = ({ cart, customer, onOrderSuccess, onBackToCart }) =
       landmark: targetLandmark || undefined,
       notes: targetNotes || undefined,
       payment_method: 'cod', // Enforce COD strictly
-      idempotency_key: idempotencyKey,
+      idempotency_key: activeIdempotencyKey,
       items: cart.map(i => ({
         product_id: i.product.id,
         quantity: i.quantity

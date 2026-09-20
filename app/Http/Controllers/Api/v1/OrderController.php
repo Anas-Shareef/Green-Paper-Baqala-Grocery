@@ -135,7 +135,7 @@ class OrderController extends BaseApiController
     public function show(string $orderNumber): JsonResponse
     {
         $order = Order::where('order_number', $orderNumber)
-            ->with(['items.product', 'customer'])
+            ->with(['items.product', 'customer', 'statusHistory'])
             ->first();
 
         if (!$order) {
@@ -149,14 +149,38 @@ class OrderController extends BaseApiController
         $data['message_body'] = $wa['message_body'];
 
         // Timeline progress status builder
-        $data['timeline'] = [
+        $timeline = [
             ['label' => 'Order Created (Pending)', 'active' => true, 'time' => $order->created_at],
-            ['label' => 'WhatsApp Confirmation Prepared', 'active' => $order->whatsapp_status === 'prepared' || $order->whatsapp_status === 'sent', 'time' => $order->created_at],
-            ['label' => 'Order Accepted by Baqqala', 'active' => in_array($order->status, ['confirmed', 'accepted', 'preparing', 'out_for_delivery', 'delivered']), 'time' => $order->accepted_at],
-            ['label' => 'Preparing Order Items', 'active' => in_array($order->status, ['preparing', 'out_for_delivery', 'delivered']), 'time' => $order->preparing_at],
+            ['label' => 'Order Confirmed by Baqqala', 'active' => in_array($order->status, ['confirmed', 'accepted', 'preparing', 'ready', 'out_for_delivery', 'delivered']), 'time' => $order->accepted_at],
+            ['label' => 'Preparing Order Items', 'active' => in_array($order->status, ['preparing', 'ready', 'out_for_delivery', 'delivered']), 'time' => $order->preparing_at],
             ['label' => 'Out for Villa Delivery', 'active' => in_array($order->status, ['out_for_delivery', 'delivered']), 'time' => $order->out_for_delivery_at],
             ['label' => 'Delivered to Villa', 'active' => $order->status === 'delivered', 'time' => $order->delivered_at],
         ];
+
+        if ($order->status === 'cancelled') {
+            $timeline[] = [
+                'label' => 'Order Cancelled' . ($order->cancel_reason ? ": {$order->cancel_reason}" : ''),
+                'active' => true,
+                'time' => $order->cancelled_at,
+                'is_exception' => true,
+            ];
+        } elseif ($order->status === 'failed_delivery') {
+            $timeline[] = [
+                'label' => 'Delivery Failed' . ($order->failed_delivery_reason ? ": {$order->failed_delivery_reason}" : ''),
+                'active' => true,
+                'time' => $order->failed_delivery_at,
+                'is_exception' => true,
+            ];
+        } elseif ($order->status === 'expired') {
+            $timeline[] = [
+                'label' => 'Order Expired (Confirmation Timed Out)',
+                'active' => true,
+                'time' => $order->updated_at,
+                'is_exception' => true,
+            ];
+        }
+
+        $data['timeline'] = $timeline;
 
         return $this->successResponse($data, 'Order details retrieved successfully');
     }

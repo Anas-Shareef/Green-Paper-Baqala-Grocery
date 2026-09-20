@@ -35,9 +35,11 @@ class CustomerAddressController extends BaseApiController
 
             if (!$customer) {
                 return $this->successResponse([
+                    'recognized' => false,
                     'customer_exists' => false,
                     'phone' => $phone,
                     'customer' => null,
+                    'default_address' => null,
                     'addresses' => [],
                 ], 'Mobile number is available for a new guest order.');
             }
@@ -69,7 +71,12 @@ class CustomerAddressController extends BaseApiController
                 ];
             }
 
+            $defaultAddress = !empty($addresses)
+                ? (collect($addresses)->firstWhere('is_default', true) ?? $addresses[0])
+                : null;
+
             return $this->successResponse([
+                'recognized' => true,
                 'customer_exists' => true,
                 'phone' => $phone,
                 'customer' => [
@@ -77,6 +84,7 @@ class CustomerAddressController extends BaseApiController
                     'name' => $customer->name,
                     'phone' => $customer->phone ?: $phone,
                 ],
+                'default_address' => $defaultAddress,
                 'addresses' => $addresses,
             ], 'Customer Recognized');
 

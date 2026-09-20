@@ -38,7 +38,7 @@ class BaqqalaSystemTest extends TestCase
         $milk->refresh();
         $this->assertEquals($initialStock - 2, $milk->stock_quantity);
 
-        $movement = StockMovement::where('reference_id', $order->id)->where('type', 'POS Sale')->first();
+        $movement = StockMovement::where('reference_id', $order->id)->whereIn('type', [StockMovement::TYPE_SALE, 'sale', 'POS Sale'])->first();
         $this->assertNotNull($movement);
         $this->assertEquals(-2, $movement->quantity);
     }
@@ -49,7 +49,7 @@ class BaqqalaSystemTest extends TestCase
         $orderService = app(OrderService::class);
 
         $this->expectException(\Exception::class);
-        $this->expectExceptionMessageMatches('/Minimum order value is ₹300/');
+        $this->expectExceptionMessageMatches('/Minimum order value is (₹|AED\s*)300/');
 
         $orderService->createOrder([
             ['product_id' => $milk->id, 'quantity' => 2]

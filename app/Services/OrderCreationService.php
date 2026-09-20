@@ -242,7 +242,7 @@ class OrderCreationService
                         'message' => "Order {$order->order_number} (Customer Order #{$customerOrderNumber}) from {$customer->name}",
                         'order_id' => $order->id,
                         'order_number' => $order->order_number,
-                        'is_read' => \Illuminate\Support\Facades\DB::raw('false'),
+                        'is_read' => false,
                     ]);
                 }
             } catch (\Throwable $e) {

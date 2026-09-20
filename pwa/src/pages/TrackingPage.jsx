@@ -72,18 +72,44 @@ export const TrackingPage = ({ currentOrder }) => {
           <div className="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm space-y-4">
             <div className="flex justify-between items-start">
               <div>
-                <span className="text-[10px] uppercase tracking-wider font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-full">
-                  Status: {order.status.replace('_', ' ').toUpperCase()}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`text-[10px] uppercase tracking-wider font-extrabold px-2.5 py-1 rounded-full border ${
+                    order.status === 'cancelled' || order.status === 'failed_delivery' || order.status === 'expired'
+                      ? 'bg-rose-100 text-rose-800 border-rose-200'
+                      : 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                  }`}>
+                    Status: {order.status.replace('_', ' ').toUpperCase()}
+                  </span>
+                  {order.customer_order_number && (
+                    <span className="text-[10px] font-extrabold font-mono bg-emerald-700 text-white px-2.5 py-1 rounded-full shadow-2xs">
+                      Customer Order #{order.customer_order_number}
+                    </span>
+                  )}
+                </div>
                 <h3 className="text-2xl font-black text-slate-900 font-mono mt-2">{order.order_number}</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Villa: <strong className="text-slate-900">{order.customer_villa || 'Villa 12'}</strong></p>
+                <p className="text-xs text-slate-500 mt-0.5">Villa: <strong className="text-slate-900">{order.customer_villa || 'Villa Delivery'}</strong></p>
+                {order.customer_address && (
+                  <p className="text-[11px] text-slate-400 mt-0.5">{order.customer_address}</p>
+                )}
               </div>
 
               <div className="text-right">
-                <div className="text-xl font-black text-emerald-700 font-mono">₹{parseFloat(order.total_amount).toFixed(2)}</div>
+                <div className="text-xl font-black text-emerald-700 font-mono">AED {parseFloat(order.total_amount).toFixed(2)}</div>
                 <div className="text-[10px] text-slate-500 uppercase font-bold mt-1">{order.payment_method} ({order.payment_status})</div>
               </div>
             </div>
+
+            {/* Exception Banner if order was cancelled, failed, or expired */}
+            {(order.status === 'cancelled' || order.status === 'failed_delivery' || order.status === 'expired') && (
+              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-800 space-y-1">
+                <div className="font-extrabold uppercase text-[10px] tracking-wider text-rose-900">
+                  {order.status === 'cancelled' ? 'Order Cancelled' : (order.status === 'failed_delivery' ? 'Delivery Attempt Failed' : 'Order Expired')}
+                </div>
+                <p className="text-xs">
+                  {order.cancel_reason || order.failed_delivery_reason || 'This order was not completed. Reserved items have been released.'}
+                </p>
+              </div>
+            )}
 
             {/* PDF Invoice Download Link */}
             <div className="pt-3 border-t border-slate-100 flex justify-between items-center text-xs">

@@ -18,7 +18,7 @@ class AdminNotificationController extends BaseApiController
     public function index(Request $request): JsonResponse
     {
         $notifications = AdminNotification::orderBy('id', 'desc')->take(30)->get();
-        $unreadCount = AdminNotification::where('is_read', false)->count();
+        $unreadCount = AdminNotification::unread()->count();
 
         return $this->successResponse([
             'notifications' => $notifications,
@@ -39,7 +39,7 @@ class AdminNotificationController extends BaseApiController
                 ->orderBy('id', 'asc')
                 ->get();
 
-            $unreadCount = AdminNotification::where('is_read', false)->count();
+            $unreadCount = AdminNotification::unread()->count();
             $pendingOrdersCount = Order::whereIn('status', ['pending', 'awaiting_whatsapp'])->count();
             
             $latestPendingOrders = Order::whereIn('status', ['pending', 'awaiting_whatsapp'])
@@ -80,7 +80,7 @@ class AdminNotificationController extends BaseApiController
             $notification->update(['is_read' => true]);
         }
 
-        $unreadCount = AdminNotification::where('is_read', false)->count();
+        $unreadCount = AdminNotification::unread()->count();
 
         return $this->successResponse([
             'unread_count' => $unreadCount,
@@ -92,7 +92,7 @@ class AdminNotificationController extends BaseApiController
      */
     public function markAllAsRead(): JsonResponse
     {
-        AdminNotification::where('is_read', false)->update(['is_read' => true]);
+        AdminNotification::unread()->update(['is_read' => true]);
 
         return $this->successResponse([
             'unread_count' => 0,

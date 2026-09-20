@@ -174,10 +174,29 @@ class OrderService
     }
 
     /**
+     * Validate whether transitioning an order to a new status is allowed by the lifecycle matrix
+     */
+    public function validateTransition(Order $order, string $newStatus): void
+    {
+        if ($order->status === $newStatus) {
+            return;
+        }
+
+        if (!$order->canTransitionTo($newStatus)) {
+            $current = $order->status;
+            $allowed = implode(', ', $order->getAllowedNextStatuses());
+            $allowedStr = empty($allowed) ? 'none (terminal state)' : "[{$allowed}]";
+            throw new \InvalidArgumentException("Invalid order status transition from '{$current}' to '{$newStatus}'. Allowed transitions: {$allowedStr}.");
+        }
+    }
+
+    /**
      * 1. Confirm Order (Awaiting WhatsApp / Pending -> Confirmed)
      */
     public function confirmOrder(Order $order, ?User $actor = null): Order
     {
+        $this->validateTransition($order, 'confirmed');
+
         return DB::transaction(function () use ($order, $actor) {
             $fromStatus = $order->status;
             $order->update([
@@ -203,6 +222,8 @@ class OrderService
      */
     public function startPreparing(Order $order, ?User $actor = null): Order
     {
+        $this->validateTransition($order, 'preparing');
+
         return DB::transaction(function () use ($order, $actor) {
             $fromStatus = $order->status;
             $order->update([
@@ -257,6 +278,8 @@ class OrderService
      */
     public function markReady(Order $order, ?User $actor = null): Order
     {
+        $this->validateTransition($order, 'ready');
+
         return DB::transaction(function () use ($order, $actor) {
             $fromStatus = $order->status;
             $order->update([
@@ -293,11 +316,13 @@ class OrderService
      */
     public function dispatchOrder(Order $order, ?int $deliveryStaffId = null, ?float $customDeliveryCost = null, ?User $actor = null): Order
     {
+        $this->validateTransition($order, 'out_for_delivery');
+
         return DB::transaction(function () use ($order, $deliveryStaffId, $customDeliveryCost, $actor) {
             $fromStatus = $order->status;
             $driverId = $deliveryStaffId ?: $order->delivery_staff_id;
-            $deliveryCost = $customDeliveryCost ?? $order->internal_delivery_cost;
-            $netProfit = $order->gross_profit - $deliveryCost;
+            $deliveryCost = $customDeliveryCost ?? $order->internal_delivery_cost ?? 0.00;
+            $netProfit = (float)($order->gross_profit ?? 0) - (float)$deliveryCost;
 
             $order->update([
                 'status' => 'out_for_delivery',
@@ -328,6 +353,8 @@ class OrderService
      */
     public function deliverOrder(Order $order, ?User $actor = null): Order
     {
+        $this->validateTransition($order, 'delivered');
+
         return DB::transaction(function () use ($order, $actor) {
             $order = Order::lockForUpdate()->with('items')->findOrFail($order->id);
             if ($order->status === 'delivered') {
@@ -406,6 +433,12 @@ class OrderService
      */
     public function failDelivery(Order $order, string $reason, ?string $notes = null, ?User $actor = null): Order
     {
+        if (empty(trim($reason))) {
+            throw new \InvalidArgumentException('A valid reason is required to mark delivery as failed.');
+        }
+
+        $this->validateTransition($order, 'failed_delivery');
+
         return DB::transaction(function () use ($order, $reason, $notes, $actor) {
             $order = Order::lockForUpdate()->with('items')->findOrFail($order->id);
             if ($order->status === 'failed_delivery') {
@@ -475,6 +508,12 @@ class OrderService
      */
     public function cancelOrder(Order $order, string $reason = 'Cancelled by admin', ?User $actor = null): Order
     {
+        if (empty(trim($reason))) {
+            throw new \InvalidArgumentException('A valid cancellation reason is required.');
+        }
+
+        $this->validateTransition($order, 'cancelled');
+
         return DB::transaction(function () use ($order, $reason, $actor) {
             $order = Order::lockForUpdate()->with('items')->findOrFail($order->id);
             if ($order->status === 'cancelled') {
@@ -542,6 +581,8 @@ class OrderService
      */
     public function expireOrder(Order $order, ?User $actor = null): Order
     {
+        $this->validateTransition($order, 'expired');
+
         return DB::transaction(function () use ($order, $actor) {
             $order = Order::lockForUpdate()->with('items')->findOrFail($order->id);
             if (!in_array($order->status, ['awaiting_whatsapp', 'pending'])) {

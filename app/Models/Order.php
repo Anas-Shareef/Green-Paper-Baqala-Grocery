@@ -75,6 +75,20 @@ class Order extends Model
         'cod_collected_at' => 'datetime',
     ];
 
+    protected $appends = [
+        'cancellation_reason',
+    ];
+
+    public function getCancellationReasonAttribute(): ?string
+    {
+        return $this->attributes['cancel_reason'] ?? null;
+    }
+
+    public function setCancellationReasonAttribute(?string $value): void
+    {
+        $this->attributes['cancel_reason'] = $value;
+    }
+
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
@@ -137,6 +151,35 @@ class Order extends Model
             return false;
         }
         return $this->getElapsedMinutes() > $slaMinutes;
+    }
+
+    public function getAllowedNextStatuses(): array
+    {
+        return match ($this->status) {
+            'awaiting_whatsapp', 'pending' => ['confirmed', 'cancelled', 'expired'],
+            'confirmed', 'accepted' => ['preparing', 'cancelled'],
+            'preparing' => ['ready', 'out_for_delivery', 'cancelled'],
+            'ready' => ['out_for_delivery', 'cancelled'],
+            'out_for_delivery' => ['delivered', 'failed_delivery'],
+            'failed_delivery' => ['preparing', 'ready', 'cancelled'],
+            'delivered', 'cancelled', 'expired' => [],
+            default => ['confirmed', 'cancelled'],
+        };
+    }
+
+    public function canTransitionTo(string $targetStatus): bool
+    {
+        if ($this->status === $targetStatus) {
+            return true;
+        }
+
+        $allowed = $this->getAllowedNextStatuses();
+        return in_array($targetStatus, $allowed, true);
+    }
+
+    public function scopeFinalizedSales($query)
+    {
+        return $query->where('status', 'delivered');
     }
 
     public function getNextAction(): array

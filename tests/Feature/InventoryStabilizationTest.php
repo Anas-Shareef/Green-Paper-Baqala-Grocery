@@ -114,7 +114,10 @@ class InventoryStabilizationTest extends TestCase
         $this->assertNotNull($movement);
         $this->assertEquals(5, $movement->quantity);
 
-        // 2. Deliver Order -> physical and reserved deducted, sale movement recorded
+        // 2. Advance through valid state machine to Delivered
+        $orderService->confirmOrder($order, $this->adminUser);
+        $orderService->startPreparing($order, $this->adminUser);
+        $orderService->dispatchOrder($order, null, null, $this->adminUser);
         $orderService->deliverOrder($order, $this->adminUser);
         $this->product->refresh();
 

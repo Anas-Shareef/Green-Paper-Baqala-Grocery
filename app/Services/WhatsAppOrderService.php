@@ -15,7 +15,7 @@ class WhatsAppOrderService
         $itemsText = "";
         foreach ($order->items as $item) {
             $lineTotalFormatted = number_format((float) $item->total, 2);
-            $itemsText .= "• {$item->product_name} × {$item->quantity}\n";
+            $itemsText .= "• {$item->product_name} × {$item->quantity} — AED {$lineTotalFormatted}\n";
         }
 
         $subtotalFormatted = number_format((float) $order->subtotal, 2);
@@ -35,17 +35,15 @@ class WhatsAppOrderService
 
         $msg = "Hello Baqqala,\n\n";
         $msg .= "I would like to place an order.\n\n";
-        $msg .= "Customer Order: #{$customerOrderNum}\n\n";
-        $msg .= "Customer:\n{$customerName}\n{$customerPhone}\n\n";
-        $msg .= "Delivery Address:\n{$canonicalAddress}\n";
+        $msg .= "Customer Order: #{$customerOrderNum}\n";
+        $msg .= "Baqqala Order ID: {$order->order_number}\n\n";
+        $msg .= "Items:\n{$itemsText}\n";
+        $msg .= "Total: AED {$totalFormatted}\n\n";
+        $msg .= "Delivery:\n{$canonicalAddress}\n";
         if (!empty($notes)) {
             $msg .= "Notes: {$notes}\n";
         }
-        $msg .= "\nItems:\n{$itemsText}\n";
-        $msg .= "Subtotal: AED {$subtotalFormatted}\n";
-        $msg .= "Delivery: {$deliveryFormatted}\n";
-        $msg .= "Total: AED {$totalFormatted}\n\n";
-        $msg .= "Payment Method:\nCash on Delivery\n\n";
+        $msg .= "\nPayment:\nCash on Delivery\n\n";
         $msg .= "Please confirm my order.\n\n";
         $msg .= "Thank you.";
 

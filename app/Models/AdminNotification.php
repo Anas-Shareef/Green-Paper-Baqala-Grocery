@@ -26,7 +26,36 @@ class AdminNotification extends Model
 
     public function setIsReadAttribute($value): void
     {
-        $this->attributes['is_read'] = ($value && $value !== 'false' && $value !== 'f') ? 'true' : 'false';
+        $bool = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        if ($bool === null) {
+            $bool = (bool) $value;
+        }
+
+        $driver = config('database.default');
+        $connDriver = config("database.connections.{$driver}.driver", $driver);
+
+        if ($connDriver === 'sqlite') {
+            $this->attributes['is_read'] = $bool ? 1 : 0;
+        } else {
+            $this->attributes['is_read'] = $bool ? 'true' : 'false';
+        }
+    }
+
+    public function scopeUnread($query)
+    {
+        $driver = config('database.default');
+        $connDriver = config("database.connections.{$driver}.driver", $driver);
+
+        if ($connDriver === 'sqlite') {
+            return $query->where(function ($q) {
+                $q->where('is_read', 0)
+                  ->orWhere('is_read', false)
+                  ->orWhere('is_read', 'false')
+                  ->orWhere('is_read', 'f');
+            });
+        }
+
+        return $query->where('is_read', false);
     }
 
     public function order(): BelongsTo

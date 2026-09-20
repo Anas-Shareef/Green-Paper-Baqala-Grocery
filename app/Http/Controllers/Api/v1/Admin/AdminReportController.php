@@ -32,12 +32,23 @@ class AdminReportController extends BaseApiController
             default => Carbon::now()->endOfDay(),
         };
 
-        $ordersQuery = Order::whereBetween('created_at', [$startDate, $endDate])
-            ->where('status', '!=', 'cancelled');
+        // Finalized Sales Query (Delivered orders represent authoritative finalized revenue per PRD Section 58)
+        $deliveredSalesQuery = Order::whereBetween('created_at', [$startDate, $endDate])
+            ->where('status', 'delivered');
 
-        $totalRevenue = (float) $ordersQuery->sum('total');
-        $totalOrders = $ordersQuery->count();
-        $deliveredOrders = Order::whereBetween('created_at', [$startDate, $endDate])->where('status', 'delivered')->count();
+        $totalRevenue = (float) $deliveredSalesQuery->sum('total_amount');
+        $deliveredOrders = $deliveredSalesQuery->count();
+
+        // Operational Pipeline Counts
+        $totalOrders = Order::whereBetween('created_at', [$startDate, $endDate])
+            ->whereNotIn('status', ['cancelled', 'expired'])
+            ->count();
+        $confirmedOrders = Order::whereBetween('created_at', [$startDate, $endDate])
+            ->whereIn('status', ['confirmed', 'accepted', 'preparing', 'ready', 'out_for_delivery'])
+            ->count();
+        $pendingOrders = Order::whereBetween('created_at', [$startDate, $endDate])
+            ->whereIn('status', ['pending', 'awaiting_whatsapp'])
+            ->count();
 
         $totalExpenses = (float) Expense::whereBetween('expense_date', [$startDate->toDateString(), $endDate->toDateString()])->sum('amount');
 
@@ -47,7 +58,7 @@ class AdminReportController extends BaseApiController
         $netProfit = $grossProfit - $totalExpenses;
 
         $topProducts = Order::whereBetween('orders.created_at', [$startDate, $endDate])
-            ->where('orders.status', '!=', 'cancelled')
+            ->where('orders.status', 'delivered')
             ->join('order_items', 'orders.id', '=', 'order_items.order_id')
             ->select('order_items.product_name', \Illuminate\Support\Facades\DB::raw('SUM(order_items.quantity) as total_qty'), \Illuminate\Support\Facades\DB::raw('SUM(order_items.total) as total_sales'))
             ->groupBy('order_items.product_name')
@@ -63,8 +74,10 @@ class AdminReportController extends BaseApiController
             ],
             'summary' => [
                 'total_revenue' => round($totalRevenue, 2),
-                'total_orders' => $totalOrders,
                 'delivered_orders' => $deliveredOrders,
+                'total_orders' => $totalOrders,
+                'confirmed_orders' => $confirmedOrders,
+                'pending_orders' => $pendingOrders,
                 'total_expenses' => round($totalExpenses, 2),
                 'estimated_cogs' => round($costOfGoods, 2),
                 'gross_profit' => round($grossProfit, 2),

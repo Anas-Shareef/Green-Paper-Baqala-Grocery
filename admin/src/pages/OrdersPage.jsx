@@ -1,7 +1,31 @@
 import React, { useEffect, useState } from 'react';
-import { ShoppingBag, Eye, RefreshCw, MessageCircle, Copy, Check, CheckCircle, Download, Upload, FileSpreadsheet, AlertCircle, X, CheckCircle2, FileText, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ShoppingBag, Eye, RefreshCw, MessageCircle, Copy, Check, CheckCircle, Download, Upload, FileSpreadsheet, AlertCircle, X, CheckCircle2, FileText, Search, ChevronLeft, ChevronRight, DollarSign, ExternalLink, Clock, Phone, AlertTriangle } from 'lucide-react';
 import { adminApi } from '../services/api';
 import { useAdminRealtime } from '../context/AdminRealtimeContext';
+
+const getAllowedNextStatuses = (currentStatus) => {
+  switch (currentStatus) {
+    case 'awaiting_whatsapp':
+    case 'pending':
+      return ['confirmed', 'cancelled', 'expired'];
+    case 'confirmed':
+    case 'accepted':
+      return ['preparing', 'cancelled'];
+    case 'preparing':
+      return ['ready', 'out_for_delivery', 'cancelled'];
+    case 'ready':
+      return ['out_for_delivery', 'cancelled'];
+    case 'out_for_delivery':
+      return ['delivered', 'failed_delivery'];
+    case 'failed_delivery':
+      return ['preparing', 'ready', 'cancelled'];
+    case 'delivered':
+    case 'cancelled':
+    case 'expired':
+    default:
+      return [];
+  }
+};
 
 export function OrdersPage() {
   const [orders, setOrders] = useState([]);
@@ -16,7 +40,26 @@ export function OrdersPage() {
   const [totalPages, setTotalPages] = useState(1);
 
   const [activeOrder, setActiveOrder] = useState(null);
+  const [drawerLoading, setDrawerLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedPhone, setCopiedPhone] = useState(false);
+
+  // Status Change Reason Modal State
+  const [reasonModal, setReasonModal] = useState({
+    open: false,
+    orderId: null,
+    targetStatus: '',
+    reason: '',
+    notes: '',
+  });
+
+  // COD Payment Collection Modal State
+  const [paymentModal, setPaymentModal] = useState({
+    open: false,
+    order: null,
+    amount: '',
+    reason: '',
+  });
 
   // Orders Import Modal State
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -71,9 +114,9 @@ export function OrdersPage() {
     fetchOrders();
   }, [selectedStatus, selectedPaymentStatus, debouncedSearch, page, perPage]);
 
-  const handleUpdateStatus = async (orderId, newStatus) => {
+  const handleUpdateStatus = async (orderId, newStatus, paymentStatus = null, reason = null) => {
     try {
-      const res = await adminApi.updateOrderStatus(orderId, newStatus);
+      const res = await adminApi.updateOrderStatus(orderId, newStatus, paymentStatus, reason);
       if (res && (res.success || res.data)) {
         const updated = res.data || res;
         if (activeOrder && activeOrder.id === orderId) {
@@ -83,7 +126,62 @@ export function OrdersPage() {
         refreshRealtime();
       }
     } catch (e) {
+      alert(e.response?.data?.message || 'Failed to update order status');
       console.error(e);
+    }
+  };
+
+  const requestStatusUpdate = (orderId, targetStatus) => {
+    if (targetStatus === 'cancelled' || targetStatus === 'failed_delivery') {
+      setReasonModal({
+        open: true,
+        orderId,
+        targetStatus,
+        reason: targetStatus === 'cancelled' ? 'Customer requested cancellation' : 'Customer unavailable',
+        notes: '',
+      });
+      return;
+    }
+    handleUpdateStatus(orderId, targetStatus);
+  };
+
+  const handleConfirmReason = async () => {
+    if (!reasonModal.orderId) return;
+    const finalReason = reasonModal.reason === 'Other'
+      ? (reasonModal.notes.trim() || 'Other reason')
+      : (reasonModal.notes.trim() ? `${reasonModal.reason} - ${reasonModal.notes.trim()}` : reasonModal.reason);
+
+    await handleUpdateStatus(reasonModal.orderId, reasonModal.targetStatus, null, finalReason);
+    setReasonModal({ open: false, orderId: null, targetStatus: '', reason: '', notes: '' });
+  };
+
+  const handleOpenDetails = async (orderSummary) => {
+    setActiveOrder(orderSummary);
+    setDrawerLoading(true);
+    try {
+      const full = await adminApi.getOrder(orderSummary.id);
+      if (full && (full.data || full.id)) {
+        setActiveOrder(full.data || full);
+      }
+    } catch (e) {
+      console.error('Failed to lazy load order details:', e);
+    } finally {
+      setDrawerLoading(false);
+    }
+  };
+
+  const handleConfirmPayment = async () => {
+    if (!paymentModal.order) return;
+    try {
+      await adminApi.collectPayment(paymentModal.order.id, parseFloat(paymentModal.amount), paymentModal.reason);
+      if (activeOrder && activeOrder.id === paymentModal.order.id) {
+        const refreshed = await adminApi.getOrder(paymentModal.order.id);
+        setActiveOrder(refreshed.data || refreshed);
+      }
+      fetchOrders();
+      setPaymentModal({ open: false, order: null, amount: '', reason: '' });
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to record COD payment.');
     }
   };
 
@@ -315,31 +413,39 @@ export function OrdersPage() {
                       </span>
                     </td>
                     <td className="p-4">
-                      <select
-                        value={o.status}
-                        onChange={(e) => handleUpdateStatus(o.id, e.target.value)}
-                        className="px-2.5 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 outline-none focus:border-emerald-600 capitalize"
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="confirmed">Confirmed</option>
-                        <option value="preparing">Preparing</option>
-                        <option value="out_for_delivery">Out for Delivery</option>
-                        <option value="delivered">Delivered</option>
-                        <option value="cancelled">Cancelled</option>
-                      </select>
+                      {getAllowedNextStatuses(o.status).length === 0 ? (
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase border ${
+                          o.status === 'delivered' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
+                          o.status === 'cancelled' ? 'bg-rose-100 text-rose-800 border-rose-200' :
+                          'bg-slate-100 text-slate-700 border-slate-200'
+                        }`}>
+                          {o.status.replace('_', ' ')}
+                        </span>
+                      ) : (
+                        <select
+                          value={o.status}
+                          onChange={(e) => requestStatusUpdate(o.id, e.target.value)}
+                          className="px-2.5 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 outline-none focus:border-emerald-600 capitalize cursor-pointer"
+                        >
+                          <option value={o.status} disabled>{o.status.replace('_', ' ')} (Current)</option>
+                          {getAllowedNextStatuses(o.status).map(st => (
+                            <option key={st} value={st}>&rarr; {st.replace('_', ' ')}</option>
+                          ))}
+                        </select>
+                      )}
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         {o.status === 'pending' && (
                           <button
-                            onClick={() => handleUpdateStatus(o.id, 'confirmed')}
+                            onClick={() => requestStatusUpdate(o.id, 'confirmed')}
                             className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-extrabold shadow-xs transition-colors"
                           >
                             Accept & Reserve
                           </button>
                         )}
                         <button
-                          onClick={() => setActiveOrder(o)}
+                          onClick={() => handleOpenDetails(o)}
                           className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold inline-flex items-center gap-1 transition-colors"
                         >
                           <Eye className="w-3.5 h-3.5 text-emerald-600" /> Details
@@ -396,7 +502,7 @@ export function OrdersPage() {
         </div>
       </div>
 
-      {/* Order Detail Modal */}
+      {/* Order Detail Drawer / Modal */}
       {activeOrder && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white border border-slate-200 rounded-3xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl text-slate-900">
@@ -409,6 +515,9 @@ export function OrdersPage() {
                   <span className="text-xs font-extrabold font-mono bg-emerald-600 text-white px-2.5 py-0.5 rounded-full">
                     Customer Order #{activeOrder.customer_order_number || 1}
                   </span>
+                  {drawerLoading && (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                  )}
                 </div>
                 <h3 className="font-mono font-black text-xl text-slate-900 mt-1">{activeOrder.order_number}</h3>
               </div>
@@ -416,41 +525,78 @@ export function OrdersPage() {
             </div>
 
             {/* Customer Details Snapshot */}
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1.5 text-xs">
-              <p><span className="text-slate-500 font-medium">Customer Name:</span> <strong className="text-slate-900">{activeOrder.customer_name_snapshot || activeOrder.customer_name}</strong></p>
-              <p><span className="text-slate-500 font-medium">Phone Number:</span> <strong className="text-slate-900 font-mono">{activeOrder.customer_phone_snapshot || activeOrder.customer_phone}</strong></p>
-              <p><span className="text-slate-500 font-medium">Delivery Address:</span> <strong className="text-slate-900">{activeOrder.customer_villa ? `Villa ${activeOrder.customer_villa}, ` : ''}{activeOrder.customer_address || activeOrder.delivery_address}</strong></p>
-              <p><span className="text-slate-500 font-medium">Payment Method:</span> <strong className="text-slate-900 uppercase font-mono">{activeOrder.payment_method}</strong> ({activeOrder.payment_status})</p>
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+              <p><span className="text-slate-500 font-medium">Customer:</span> <strong className="text-slate-900">{activeOrder.customer_name_snapshot || activeOrder.customer_name}</strong></p>
+              <div className="flex items-center justify-between">
+                <p><span className="text-slate-500 font-medium">Phone:</span> <strong className="text-slate-900 font-mono">{activeOrder.customer_phone_snapshot || activeOrder.customer_phone}</strong></p>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(activeOrder.customer_phone_snapshot || activeOrder.customer_phone || '');
+                    setCopiedPhone(true);
+                    setTimeout(() => setCopiedPhone(false), 2000);
+                  }}
+                  className="px-2 py-0.5 text-[10px] bg-white border border-slate-200 rounded text-slate-600 hover:bg-slate-100 font-bold"
+                >
+                  {copiedPhone ? 'Copied' : 'Copy Phone'}
+                </button>
+              </div>
+              <p><span className="text-slate-500 font-medium">Delivery:</span> <strong className="text-slate-900">{activeOrder.customer_villa ? `Villa ${activeOrder.customer_villa}, ` : ''}{activeOrder.customer_address || activeOrder.delivery_address}</strong></p>
+              
+              <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between">
+                <div>
+                  <span className="text-slate-500 font-medium">Payment:</span> <strong className="text-slate-900 uppercase font-mono">{activeOrder.payment_method}</strong> ({activeOrder.payment_status})
+                </div>
+                {activeOrder.payment_status !== 'paid' && (
+                  <button
+                    onClick={() => setPaymentModal({ open: true, order: activeOrder, amount: activeOrder.total_amount || '', reason: '' })}
+                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-extrabold flex items-center gap-1 shadow-2xs transition-colors"
+                  >
+                    <DollarSign className="w-3 h-3" /> Collect COD
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* WhatsApp Message Preview Box */}
+            {/* WhatsApp Actions Box */}
             <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 space-y-2 text-xs">
               <div className="flex justify-between items-center font-extrabold text-emerald-950">
                 <span className="flex items-center gap-1.5">
                   <MessageCircle className="w-4 h-4 text-emerald-700" />
-                  WhatsApp Prefilled Message
+                  WhatsApp Handoff
                 </span>
-                <button
-                  onClick={() => handleCopyText(generateWhatsAppText(activeOrder))}
-                  className="px-2.5 py-1 bg-white hover:bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors"
-                >
-                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
-                  {copied ? 'Copied' : 'Copy'}
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => {
+                      const msg = generateWhatsAppText(activeOrder);
+                      const targetDigits = (activeOrder.customer_phone_snapshot || activeOrder.customer_phone || '').replace(/[^\d]/g, '');
+                      window.open(`https://wa.me/${targetDigits}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
+                    }}
+                    className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-extrabold flex items-center gap-1 transition-colors"
+                  >
+                    <ExternalLink className="w-3 h-3" /> Open WA
+                  </button>
+                  <button
+                    onClick={() => handleCopyText(generateWhatsAppText(activeOrder))}
+                    className="px-2 py-1 bg-white hover:bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-colors"
+                  >
+                    {copied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-slate-500" />}
+                    {copied ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
               </div>
               <textarea
                 readOnly
                 value={generateWhatsAppText(activeOrder)}
-                className="w-full bg-white border border-emerald-200 text-slate-800 font-mono text-[11px] rounded-xl p-3 outline-none h-28 resize-none"
+                className="w-full bg-white border border-emerald-200 text-slate-800 font-mono text-[11px] rounded-xl p-3 outline-none h-24 resize-none"
               ></textarea>
             </div>
 
             {/* Order Items */}
             <div className="space-y-2">
               <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">Order Items ({activeOrder.items?.length || 0})</h4>
-              <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden">
+              <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden max-h-40 overflow-y-auto">
                 {activeOrder.items?.map((item) => (
-                  <div key={item.id} className="p-3 bg-white flex items-center justify-between text-xs">
+                  <div key={item.id} className="p-2.5 bg-white flex items-center justify-between text-xs">
                     <div>
                       <span className="font-bold text-slate-900 block">{item.product_name}</span>
                       <span className="text-slate-500">{item.quantity} &times; AED {parseFloat(item.unit_price).toFixed(2)}</span>
@@ -461,23 +607,221 @@ export function OrdersPage() {
               </div>
             </div>
 
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between font-mono font-black text-slate-900 text-base">
+            {/* Status Audit Trail */}
+            {activeOrder.statusHistory && activeOrder.statusHistory.length > 0 && (
+              <div className="space-y-1.5">
+                <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-slate-500" /> Status Audit Trail
+                </h4>
+                <div className="border border-slate-200 rounded-2xl p-2.5 bg-slate-50 text-[11px] max-h-32 overflow-y-auto space-y-1">
+                  {activeOrder.statusHistory.map((sh, idx) => (
+                    <div key={idx} className="flex justify-between items-start py-1 border-b border-slate-100 last:border-0">
+                      <div>
+                        <span className="font-bold text-slate-900 capitalize">{sh.to_status?.replace('_', ' ')}</span>
+                        {sh.reason && <p className="text-[10px] text-slate-500">{sh.reason}</p>}
+                      </div>
+                      <div className="text-right text-[10px] text-slate-400 font-mono">
+                        <div>{sh.changed_by}</div>
+                        <div>{new Date(sh.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between font-mono font-black text-slate-900 text-base">
               <span>TOTAL DUE:</span>
               <span className="text-xl text-emerald-700">AED {parseFloat(activeOrder.total_amount || activeOrder.total || 0).toFixed(2)}</span>
             </div>
 
-            {/* Order Status Transition Actions */}
-            <div className="pt-2 flex gap-2">
+            {/* Lifecycle Quick Actions in Drawer */}
+            <div className="pt-2 flex flex-wrap gap-2">
               {activeOrder.status === 'pending' && (
                 <button
-                  onClick={() => handleUpdateStatus(activeOrder.id, 'confirmed')}
-                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all"
+                  onClick={() => requestStatusUpdate(activeOrder.id, 'confirmed')}
+                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all"
                 >
-                  <CheckCircle className="w-4 h-4" /> Accept & Reserve Stock
+                  <CheckCircle className="w-4 h-4" /> Confirm & Reserve
+                </button>
+              )}
+              {activeOrder.status === 'confirmed' && (
+                <button
+                  onClick={() => requestStatusUpdate(activeOrder.id, 'preparing')}
+                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all"
+                >
+                  Start Preparing
+                </button>
+              )}
+              {activeOrder.status === 'preparing' && (
+                <button
+                  onClick={() => requestStatusUpdate(activeOrder.id, 'out_for_delivery')}
+                  className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs uppercase rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all"
+                >
+                  Dispatch for Delivery
+                </button>
+              )}
+              {activeOrder.status === 'out_for_delivery' && (
+                <>
+                  <button
+                    onClick={() => requestStatusUpdate(activeOrder.id, 'delivered')}
+                    className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all"
+                  >
+                    Mark Delivered (Finalize Sale)
+                  </button>
+                  <button
+                    onClick={() => requestStatusUpdate(activeOrder.id, 'failed_delivery')}
+                    className="py-2.5 px-3 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs uppercase rounded-xl shadow-xs transition-all"
+                  >
+                    Fail Delivery
+                  </button>
+                </>
+              )}
+              {getAllowedNextStatuses(activeOrder.status).includes('cancelled') && (
+                <button
+                  onClick={() => requestStatusUpdate(activeOrder.id, 'cancelled')}
+                  className="py-2.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs uppercase rounded-xl transition-all"
+                >
+                  Cancel Order
                 </button>
               )}
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Mandatory Reason Modal for Cancellation & Failed Delivery */}
+      {reasonModal.open && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 text-slate-900">
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-800 flex items-center justify-center font-bold">
+                <AlertTriangle className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 capitalize">
+                  {reasonModal.targetStatus === 'cancelled' ? 'Cancel Customer Order' : 'Record Failed Delivery'}
+                </h3>
+                <p className="text-xs text-slate-500">Document reason for inventory & audit tracking</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <label className="block font-bold text-slate-700">Select Reason:</label>
+              <select
+                value={reasonModal.reason}
+                onChange={(e) => setReasonModal({ ...reasonModal, reason: e.target.value })}
+                className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 outline-none focus:border-emerald-600"
+              >
+                {reasonModal.targetStatus === 'cancelled' ? (
+                  <>
+                    <option value="Customer requested cancellation">Customer requested cancellation</option>
+                    <option value="Out of stock">Out of stock</option>
+                    <option value="Unable to contact customer">Unable to contact customer</option>
+                    <option value="Duplicate order">Duplicate order</option>
+                    <option value="Delivery issue">Delivery issue</option>
+                    <option value="Other">Other (specify below)</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="Customer unavailable">Customer unavailable</option>
+                    <option value="Wrong address">Wrong address</option>
+                    <option value="Customer refused">Customer refused</option>
+                    <option value="No response">No response</option>
+                    <option value="Other">Other (specify below)</option>
+                  </>
+                )}
+              </select>
+
+              <label className="block font-bold text-slate-700">Additional Notes / Details:</label>
+              <textarea
+                value={reasonModal.notes}
+                onChange={(e) => setReasonModal({ ...reasonModal, notes: e.target.value })}
+                placeholder={reasonModal.reason === 'Other' ? 'Mandatory explanation...' : 'Optional notes...'}
+                className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 outline-none focus:border-emerald-600 h-20 resize-none"
+              ></textarea>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setReasonModal({ open: false, orderId: null, targetStatus: '', reason: '', notes: '' })}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
+              >
+                Go Back
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReason}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs"
+              >
+                Confirm {reasonModal.targetStatus.replace('_', ' ')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* COD Payment Collection Modal */}
+      {paymentModal.open && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4 text-slate-900">
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
+                <DollarSign className="w-5 h-5 text-emerald-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Record COD Cash Collection</h3>
+                <p className="text-xs text-slate-500">Order {paymentModal.order?.order_number}</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Cash Amount Collected (AED):</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={paymentModal.amount}
+                  onChange={(e) => setPaymentModal({ ...paymentModal, amount: e.target.value })}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-mono font-bold text-slate-900 text-base outline-none focus:border-emerald-600"
+                />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Expected Total: AED {parseFloat(paymentModal.order?.total_amount || 0).toFixed(2)}
+                </span>
+              </div>
+
+              {Math.abs(parseFloat(paymentModal.amount || 0) - parseFloat(paymentModal.order?.total_amount || 0)) > 0.01 && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Reason for Difference:</label>
+                  <input
+                    type="text"
+                    value={paymentModal.reason}
+                    onChange={(e) => setPaymentModal({ ...paymentModal, reason: e.target.value })}
+                    placeholder="e.g. Customer tipped / rounding discount"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-slate-900 outline-none focus:border-emerald-600"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setPaymentModal({ open: false, order: null, amount: '', reason: '' })}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmPayment}
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs"
+              >
+                Record Payment
+              </button>
+            </div>
           </div>
         </div>
       )}
