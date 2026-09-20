@@ -216,26 +216,51 @@ class AdminInventoryController extends BaseApiController
     }
 
     /**
-     * Show Stock Count Session with Items
+     * Get Product-Level Stock Ledger with Server-Side Pagination (PRD Section 36)
      */
-    public function showCount(int $id): JsonResponse
+    public function ledger(Request $request, int $id): JsonResponse
     {
-        $count = StockCount::with(['category', 'items.product'])->findOrFail($id);
-        return $this->successResponse($count, 'Stock count session details retrieved successfully');
+        $product = Product::with('category')->findOrFail($id);
+        $perPage = min((int) $request->input('per_page', 25), 100);
+
+        $movements = StockMovement::where('product_id', $id)
+            ->orderBy('id', 'desc')
+            ->paginate($perPage);
+
+        return $this->paginatedResponse($movements, "Stock ledger for {$product->name} retrieved successfully");
     }
 
     /**
-     * Approve Stock Count Session
+     * Diagnostic Inventory Reconciliation Tool (PRD Section 62)
      */
-    public function approveCount(int $id, Request $request, InventoryService $inventoryService): JsonResponse
+    public function reconciliation(Request $request, InventoryService $inventoryService): JsonResponse
     {
+        $categoryId = $request->input('category_id') ? (int) $request->input('category_id') : null;
+        $search = $request->input('q');
+
+        $report = $inventoryService->getReconciliationReport($categoryId, $search);
+        return $this->successResponse($report, 'Inventory reconciliation report retrieved successfully');
+    }
+
+    /**
+     * Apply Auditable Reconciliation Correction
+     */
+    public function correctReconciliation(Request $request, int $id, InventoryService $inventoryService): JsonResponse
+    {
+        $request->validate([
+            'new_stock_quantity' => 'required|integer|min:0',
+            'reason' => 'required|string|min:3|max:255',
+        ]);
+
         try {
-            $count = $inventoryService->approveStockCount(
+            $product = $inventoryService->applyReconciliationCorrection(
                 $id,
+                (int) $request->input('new_stock_quantity'),
+                $request->input('reason'),
                 $request->user()?->name ?? 'Admin API'
             );
 
-            return $this->successResponse($count, 'Stock count session approved and variances applied to ledger');
+            return $this->successResponse($product, 'Inventory discrepancy corrected and ledger entry recorded');
         } catch (\Throwable $e) {
             return $this->errorResponse($e->getMessage(), [], 400);
         }

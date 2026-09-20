@@ -116,14 +116,31 @@ class InventoryService
             throw new \InvalidArgumentException("A mandatory reason must be provided for stock adjustment.");
         }
 
+        if ($newStockQuantity < 0) {
+            throw new \InvalidArgumentException("Stock quantity cannot become negative (Rule 1).");
+        }
+
         return DB::transaction(function () use ($productId, $newStockQuantity, $reason, $type, $userName, $notes) {
             $product = Product::lockForUpdate()->findOrFail($productId);
             $stockBefore = (int) $product->stock_quantity;
-            $diff = $newStockQuantity - $stockBefore;
+            $reserved = (int) $product->reserved_quantity;
 
+            if ($newStockQuantity < $reserved) {
+                throw new \InvalidArgumentException("Cannot adjust stock to {$newStockQuantity} units because {$reserved} units are currently reserved by active orders (Rule 2).");
+            }
+
+            $diff = $newStockQuantity - $stockBefore;
             if ($diff === 0) {
                 return $product;
             }
+
+            // Standardize canonical movement type
+            $canonicalType = match (strtolower($type)) {
+                'damage', 'damaged' => StockMovement::TYPE_DAMAGED,
+                'expiry', 'expired' => StockMovement::TYPE_EXPIRED,
+                'correction', 'stock_correction' => StockMovement::TYPE_STOCK_CORRECTION,
+                default => ($diff > 0 ? StockMovement::TYPE_ADJUSTMENT_IN : StockMovement::TYPE_ADJUSTMENT_OUT),
+            };
 
             $product->update([
                 'stock_quantity' => $newStockQuantity,
@@ -133,7 +150,7 @@ class InventoryService
 
             StockMovement::create([
                 'product_id' => $product->id,
-                'type' => $type,
+                'type' => $canonicalType,
                 'quantity' => $diff,
                 'stock_before' => $stockBefore,
                 'stock_after' => $newStockQuantity,
@@ -627,8 +644,9 @@ class InventoryService
         return DB::transaction(function () use ($receiptId, $userName) {
             $receipt = StockReceipt::lockForUpdate()->with('items')->findOrFail($receiptId);
 
+            // Idempotency: if already completed, return existing confirmed receipt without duplicating stock additions
             if ($receipt->status === 'received') {
-                throw new \InvalidArgumentException("GRN {$receipt->grn_number} has already been confirmed and received.");
+                return $receipt->load(['supplier', 'items.product']);
             }
 
             if ($receipt->status === 'cancelled') {
@@ -639,7 +657,7 @@ class InventoryService
 
             foreach ($receipt->items as $item) {
                 $product = Product::lockForUpdate()->findOrFail($item->product_id);
-                $sellableQty = (int) $item->quantity_sellable;
+                $sellableQty = (int) ($item->quantity_sellable > 0 ? $item->quantity_sellable : max(0, (int)$item->quantity_received - (int)$item->quantity_damaged));
 
                 if ($sellableQty <= 0) {
                     continue;
@@ -671,7 +689,7 @@ class InventoryService
                 // Append-only stock ledger movement
                 StockMovement::create([
                     'product_id' => $product->id,
-                    'type' => 'Purchase',
+                    'type' => StockMovement::TYPE_PURCHASE_RECEIVED,
                     'quantity' => $sellableQty,
                     'stock_before' => $stockBefore,
                     'stock_after' => $stockAfter,
@@ -778,5 +796,120 @@ class InventoryService
             'month_receipts_count' => $monthCount,
             'month_total_value' => round($monthTotalValue, 2),
         ];
+    }
+
+    /**
+     * Diagnostic Inventory Reconciliation Tool (PRD Section 62).
+     * Compares recorded movements in stock ledger against current physical & reserved stock.
+     */
+    public function getReconciliationReport(?int $categoryId = null, ?string $search = null): array
+    {
+        $query = Product::with('category')->where('status', 'active');
+
+        if ($categoryId) {
+            $query->where('category_id', $categoryId);
+        }
+
+        if ($search && trim($search) !== '') {
+            $term = trim($search);
+            $query->where(function ($q) use ($term) {
+                $q->where('name', 'like', "%{$term}%")
+                  ->orWhere('barcode', 'like', "%{$term}%")
+                  ->orWhere('sku', 'like', "%{$term}%");
+            });
+        }
+
+        $products = $query->orderBy('name')->get();
+        $discrepancies = [];
+        $totalChecked = $products->count();
+
+        // Query movement sums in batch for efficiency
+        $productIds = $products->pluck('id')->toArray();
+        $movementSums = StockMovement::whereIn('product_id', $productIds)
+            ->selectRaw('product_id, COALESCE(SUM(quantity), 0) as total_diff')
+            ->groupBy('product_id')
+            ->pluck('total_diff', 'product_id');
+
+        $lastMovements = StockMovement::whereIn('product_id', $productIds)
+            ->selectRaw('product_id, MAX(created_at) as last_movement')
+            ->groupBy('product_id')
+            ->pluck('last_movement', 'product_id');
+
+        foreach ($products as $p) {
+            $currentStock = (int) $p->stock_quantity;
+            $reservedStock = (int) $p->reserved_quantity;
+            $availableStock = max(0, $currentStock - $reservedStock);
+            $recordedNetDiff = (int) ($movementSums[$p->id] ?? 0);
+
+            // Check if there is an opening stock entry or if net movements equals current stock
+            $hasLedger = isset($movementSums[$p->id]);
+            $isDiscrepant = false;
+            $discrepancyDiff = 0;
+
+            if ($hasLedger) {
+                // If ledger exists, net diff should equal stock_quantity unless unrecorded opening stock
+                if ($recordedNetDiff !== $currentStock) {
+                    $isDiscrepant = true;
+                    $discrepancyDiff = $currentStock - $recordedNetDiff;
+                }
+            } else if ($currentStock > 0) {
+                // No ledger entries at all, but product has positive stock
+                $isDiscrepant = true;
+                $discrepancyDiff = $currentStock;
+            }
+
+            // Invariant check: reserved > physical
+            $invariantViolation = ($reservedStock > $currentStock) || ($currentStock < 0);
+
+            if ($isDiscrepant || $invariantViolation) {
+                $discrepancies[] = [
+                    'product_id' => $p->id,
+                    'name' => $p->name,
+                    'product_name' => $p->name,
+                    'sku' => $p->sku,
+                    'barcode' => $p->barcode,
+                    'category' => $p->category?->name ?? 'General',
+                    'physical_stock' => $currentStock,
+                    'current_stock' => $currentStock,
+                    'reserved_stock' => $reservedStock,
+                    'available_stock' => $availableStock,
+                    'recorded_net_movements' => $recordedNetDiff,
+                    'computed_stock' => $recordedNetDiff,
+                    'discrepancy' => $discrepancyDiff,
+                    'difference' => $discrepancyDiff,
+                    'has_invariant_violation' => $invariantViolation,
+                    'last_movement' => $lastMovements[$p->id] ?? null,
+                ];
+            }
+        }
+
+        return [
+            'summary' => [
+                'total_products' => $totalChecked,
+                'discrepancies_count' => count($discrepancies),
+                'total_movements_checked' => StockMovement::count(),
+            ],
+            'total_checked' => $totalChecked,
+            'discrepancies_count' => count($discrepancies),
+            'discrepancies' => $discrepancies,
+        ];
+    }
+
+    /**
+     * Apply Auditable Reconciliation Correction (PRD Section 62).
+     */
+    public function applyReconciliationCorrection(int $productId, int $newPhysicalStock, string $reason, string $userName = 'Admin'): Product
+    {
+        if (empty(trim($reason))) {
+            throw new \InvalidArgumentException("A mandatory audit reason is required to correct an inventory discrepancy.");
+        }
+
+        return $this->adjustStock(
+            $productId,
+            $newPhysicalStock,
+            "Reconciliation Correction: {$reason}",
+            StockMovement::TYPE_STOCK_CORRECTION,
+            $userName
+        );
     }
 }

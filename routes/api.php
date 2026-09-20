@@ -83,11 +83,14 @@ Route::prefix('v1')->group(function () {
         Route::get('/inventory/movements', [AdminInventoryController::class, 'movements']);
         Route::get('/inventory/reorder', [AdminInventoryController::class, 'reorder']);
         Route::get('/inventory/valuation', [AdminInventoryController::class, 'valuation']);
+        Route::get('/inventory/reconciliation', [AdminInventoryController::class, 'reconciliation']);
+        Route::post('/inventory/reconciliation/{id}/correct', [AdminInventoryController::class, 'correctReconciliation']);
         Route::get('/inventory/counts', [AdminInventoryController::class, 'listCounts']);
         Route::post('/inventory/counts', [AdminInventoryController::class, 'startCount']);
         Route::get('/inventory/counts/{id}', [AdminInventoryController::class, 'showCount']);
         Route::post('/inventory/counts/{id}/approve', [AdminInventoryController::class, 'approveCount']);
         Route::get('/inventory/{id}', [AdminInventoryController::class, 'show']);
+        Route::get('/inventory/{id}/ledger', [AdminInventoryController::class, 'ledger']);
         Route::post('/inventory/adjustments', [AdminInventoryController::class, 'adjustStock']);
 
         // Stock Receiving Station & Goods Received Note (GRN) Routes

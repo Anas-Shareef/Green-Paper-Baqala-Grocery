@@ -111,6 +111,17 @@ class AdminReceivingController extends BaseApiController
             return $this->errorResponse('Validation failed', 422, $validator->errors());
         }
 
+        // Check for duplicate supplier invoice
+        if ($request->filled('supplier_id') && $request->filled('supplier_invoice_number')) {
+            $existing = StockReceipt::where('supplier_id', $request->input('supplier_id'))
+                ->where('supplier_invoice_number', trim($request->input('supplier_invoice_number')))
+                ->where('status', '!=', 'cancelled')
+                ->first();
+            if ($existing) {
+                return $this->errorResponse("Receipt {$existing->grn_number} already exists for this supplier invoice number.", 422);
+            }
+        }
+
         try {
             $userName = auth()->user()?->name ?? 'Admin';
             $receipt = $this->inventoryService->createStockReceipt(

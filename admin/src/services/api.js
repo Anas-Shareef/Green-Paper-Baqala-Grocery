@@ -107,8 +107,24 @@ export const adminApi = {
   },
 
   // Inventory & Stock Adjustments
-  getInventory: async () => {
-    const res = await client.get(`${getApiBaseUrl()}/admin/inventory`);
+  getInventory: async (params = {}) => {
+    const res = await client.get(`${getApiBaseUrl()}/admin/inventory`, { params });
+    return res.data;
+  },
+  getInventoryProducts: async (params = {}) => {
+    const res = await client.get(`${getApiBaseUrl()}/admin/inventory`, { params });
+    return res.data;
+  },
+  getProductLedger: async (id, params = {}) => {
+    const res = await client.get(`${getApiBaseUrl()}/admin/inventory/${id}/ledger`, { params });
+    return res.data;
+  },
+  getReconciliationReport: async (params = {}) => {
+    const res = await client.get(`${getApiBaseUrl()}/admin/inventory/reconciliation`, { params });
+    return res.data;
+  },
+  correctReconciliation: async (id, payload) => {
+    const res = await client.post(`${getApiBaseUrl()}/admin/inventory/reconciliation/${id}/correct`, payload);
     return res.data;
   },
   adjustStock: async (payload) => {

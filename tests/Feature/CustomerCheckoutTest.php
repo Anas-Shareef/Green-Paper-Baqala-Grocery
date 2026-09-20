@@ -154,9 +154,11 @@ class CustomerCheckoutTest extends TestCase
         $response->assertJsonPath('data.order.whatsapp_status', 'prepared');
         $this->assertStringContainsString('https://wa.me/', $response->json('data.whatsapp_url'));
 
-        // Assert stock deduction
+        // Assert stock reservation (PRD Model: shelf stock untouched, reserved quantity incremented)
         $product = Product::find(1);
-        $this->assertEquals(96, $product->stock_quantity);
+        $this->assertEquals(100, $product->stock_quantity);
+        $this->assertEquals(4, $product->reserved_quantity);
+        $this->assertEquals(96, $product->available_stock);
 
         // Assert Customer and Address created
         $customer = Customer::where('phone', '+971501112233')->first();
@@ -192,9 +194,11 @@ class CustomerCheckoutTest extends TestCase
         $this->assertEquals($orderNumber1, $orderNumber2);
         $this->assertTrue($res2->json('data.is_duplicate'));
 
-        // Stock deducted only once for 2 items
+        // Stock reserved only once for 2 items
         $product = Product::find(1);
-        $this->assertEquals(98, $product->stock_quantity);
+        $this->assertEquals(100, $product->stock_quantity);
+        $this->assertEquals(2, $product->reserved_quantity);
+        $this->assertEquals(98, $product->available_stock);
     }
 
     public function test_historical_address_snapshot_integrity()

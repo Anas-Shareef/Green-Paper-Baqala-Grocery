@@ -86,17 +86,18 @@ class Product extends Model
 
     public function getAvailableStockAttribute(): int
     {
-        return max(0, $this->stock_quantity - $this->reserved_quantity);
+        return max(0, (int) $this->stock_quantity - (int) $this->reserved_quantity);
     }
 
     public function getIsLowStockAttribute(): bool
     {
-        return $this->stock_quantity <= $this->minimum_stock_level && $this->stock_quantity > 0;
+        $available = $this->available_stock;
+        return $available <= $this->minimum_stock_level && $available > 0;
     }
 
     public function getIsOutOfStockAttribute(): bool
     {
-        return $this->stock_quantity <= 0;
+        return $this->available_stock <= 0;
     }
 
     public function getProfitMarginAttribute(): float
@@ -107,5 +108,56 @@ class Product extends Model
     public function getPriceAttribute(): float
     {
         return (float) ($this->attributes['retail_price'] ?? $this->attributes['price'] ?? 0);
+    }
+
+    /**
+     * Reserve stock for an active order without decrementing physical stock.
+     */
+    public function reserveStock(int $quantity): void
+    {
+        if ($quantity <= 0) return;
+        $available = $this->available_stock;
+        if ($available < $quantity) {
+            throw new \InvalidArgumentException("Insufficient available stock for '{$this->name}'. Available: {$available}, Requested: {$quantity}");
+        }
+        $this->increment('reserved_quantity', $quantity);
+    }
+
+    /**
+     * Release previously reserved stock back to available pool.
+     */
+    public function releaseReservation(int $quantity): void
+    {
+        if ($quantity <= 0) return;
+        $currentReserved = (int) $this->reserved_quantity;
+        $toRelease = min($currentReserved, $quantity);
+        $this->decrement('reserved_quantity', $toRelease);
+    }
+
+    /**
+     * Finalize sale upon delivery: deducts physical stock and clears reservation.
+     */
+    public function finalizeSale(int $quantity): void
+    {
+        if ($quantity <= 0) return;
+        $currentStock = (int) $this->stock_quantity;
+        $currentReserved = (int) $this->reserved_quantity;
+
+        $newStock = max(0, $currentStock - $quantity);
+        $newReserved = max(0, $currentReserved - $quantity);
+
+        $this->update([
+            'stock_quantity' => $newStock,
+            'reserved_quantity' => $newReserved,
+        ]);
+    }
+
+    /**
+     * Return delivered stock back into physical inventory.
+     */
+    public function returnDeliveredStock(int $quantity): void
+    {
+        if ($quantity <= 0) return;
+        $this->increment('stock_quantity', $quantity);
     }
 }

@@ -87,7 +87,11 @@ class OrderController extends BaseApiController
             $input['delivery_address'] = $input['street_address'];
             $input['zone'] = trim($input['zone'] ?? $input['address']['zone'] ?? '');
 
-            // Enforce Cash on Delivery (COD) strictly for customer checkout
+            // Enforce Cash on Delivery (COD) strictly for customer checkout (PRD Section 13)
+            $rawPm = strtolower(trim((string)($input['payment_method'] ?? 'cod')));
+            if (!in_array($rawPm, ['cod', 'cash', 'cash_on_delivery', ''])) {
+                return $this->errorResponse('Only Cash on Delivery (COD) is supported.', ['payment_method' => ['Only Cash on Delivery is supported']], 400);
+            }
             $input['payment_method'] = 'cod';
 
             $result = $this->orderCreationService->createOrder($input);

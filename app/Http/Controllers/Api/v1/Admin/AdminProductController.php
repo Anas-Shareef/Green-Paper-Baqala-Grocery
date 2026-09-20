@@ -48,12 +48,11 @@ class AdminProductController extends BaseApiController
         if ($request->has('stock_status') && !empty($request->input('stock_status'))) {
             $stockStatus = $request->input('stock_status');
             if ($stockStatus === 'out_of_stock') {
-                $query->where('stock_quantity', '<=', 0);
+                $query->whereRaw('(stock_quantity - COALESCE(reserved_quantity, 0)) <= 0');
             } elseif ($stockStatus === 'low_stock') {
-                $query->where('stock_quantity', '>', 0)
-                      ->whereColumn('stock_quantity', '<=', 'minimum_stock_level');
+                $query->whereRaw('(stock_quantity - COALESCE(reserved_quantity, 0)) > 0 AND (stock_quantity - COALESCE(reserved_quantity, 0)) <= minimum_stock_level');
             } elseif ($stockStatus === 'in_stock') {
-                $query->whereColumn('stock_quantity', '>', 'minimum_stock_level');
+                $query->whereRaw('(stock_quantity - COALESCE(reserved_quantity, 0)) > minimum_stock_level');
             }
         }
 
@@ -109,6 +108,8 @@ class AdminProductController extends BaseApiController
             $imageUrl = $this->storageService->uploadFile($request->file('image_file'), 'product-images', 'products');
         }
 
+        $initialStock = (int) $request->input('stock_quantity', 0);
+
         $product = Product::create([
             'name' => trim($request->input('name')),
             'category_id' => $request->input('category_id'),
@@ -117,12 +118,26 @@ class AdminProductController extends BaseApiController
             'unit' => $request->input('unit', 'piece'),
             'barcode' => $barcode,
             'sku' => $sku,
-            'stock_quantity' => $request->input('stock_quantity', 0),
+            'stock_quantity' => $initialStock,
             'minimum_stock_level' => $request->input('minimum_stock_level', 5),
             'description' => $request->input('description'),
             'image' => $imageUrl,
             'status' => $request->input('status', 'active'),
         ]);
+
+        if ($initialStock > 0) {
+            \App\Models\StockMovement::create([
+                'product_id' => $product->id,
+                'type' => \App\Models\StockMovement::TYPE_OPENING_STOCK,
+                'quantity' => $initialStock,
+                'stock_before' => 0,
+                'stock_after' => $initialStock,
+                'unit_cost' => (float) $wholesaleCost,
+                'reference_type' => 'Initial',
+                'reason' => "Initial catalog stock on product creation",
+                'created_by' => auth()->user()?->name ?? 'Admin',
+            ]);
+        }
 
         return $this->successResponse($product->load('category'), 'Product created successfully', 201);
     }
@@ -175,8 +190,36 @@ class AdminProductController extends BaseApiController
 
         $data = $request->only([
             'name', 'category_id', 'unit', 'barcode', 'sku',
-            'stock_quantity', 'minimum_stock_level', 'description', 'status'
+            'minimum_stock_level', 'description', 'status'
         ]);
+
+        // Audit-safe stock quantity update (never silent)
+        if ($request->has('stock_quantity') && $request->input('stock_quantity') !== null) {
+            $targetStock = (int) $request->input('stock_quantity');
+            $currentStock = (int) $product->stock_quantity;
+            $reserved = (int) $product->reserved_quantity;
+
+            if ($targetStock < $reserved) {
+                return $this->errorResponse("Cannot set stock to {$targetStock} because {$reserved} units are reserved by active orders.", 422);
+            }
+
+            if ($targetStock !== $currentStock) {
+                $diff = $targetStock - $currentStock;
+                $data['stock_quantity'] = $targetStock;
+
+                \App\Models\StockMovement::create([
+                    'product_id' => $product->id,
+                    'type' => $diff > 0 ? \App\Models\StockMovement::TYPE_ADJUSTMENT_IN : \App\Models\StockMovement::TYPE_ADJUSTMENT_OUT,
+                    'quantity' => $diff,
+                    'stock_before' => $currentStock,
+                    'stock_after' => $targetStock,
+                    'unit_cost' => (float) $product->wholesale_cost,
+                    'reference_type' => 'ProductEdit',
+                    'reason' => "Catalog product edit stock adjustment",
+                    'created_by' => auth()->user()?->name ?? 'Admin',
+                ]);
+            }
+        }
 
         if ($request->has('retail_price') || $request->has('price')) {
             $data['retail_price'] = $request->input('retail_price', $request->input('price'));
@@ -571,14 +614,32 @@ class AdminProductController extends BaseApiController
                         $updateData['barcode'] = $r['barcode'];
                     }
                     if ($importStock) {
-                        $updateData['stock_quantity'] = $r['stock_quantity'];
+                        $targetStock = (int) $r['stock_quantity'];
+                        $currentStock = (int) $product->stock_quantity;
+                        if ($targetStock !== $currentStock) {
+                            $diff = $targetStock - $currentStock;
+                            $updateData['stock_quantity'] = $targetStock;
+
+                            \App\Models\StockMovement::create([
+                                'product_id' => $product->id,
+                                'type' => $diff > 0 ? \App\Models\StockMovement::TYPE_ADJUSTMENT_IN : \App\Models\StockMovement::TYPE_ADJUSTMENT_OUT,
+                                'quantity' => $diff,
+                                'stock_before' => $currentStock,
+                                'stock_after' => $targetStock,
+                                'unit_cost' => (float) $product->wholesale_cost,
+                                'reference_type' => 'BatchImport',
+                                'reason' => "Excel batch import stock update",
+                                'created_by' => auth()->user()?->name ?? 'Admin Import',
+                            ]);
+                        }
                     }
 
                     $product->update($updateData);
                     $updated++;
                 } else {
                     // Create new product
-                    Product::create([
+                    $newStock = (int) $r['stock_quantity'];
+                    $newProd = Product::create([
                         'name' => $r['name'],
                         'sku' => $r['sku'],
                         'barcode' => $r['barcode'] ?: ('629' . rand(1000000000, 9999999999)),
@@ -586,11 +647,26 @@ class AdminProductController extends BaseApiController
                         'unit' => $r['unit'],
                         'retail_price' => $r['selling_price'],
                         'wholesale_cost' => $r['cost_price'],
-                        'stock_quantity' => $r['stock_quantity'],
+                        'stock_quantity' => $newStock,
                         'minimum_stock_level' => $r['min_stock'],
                         'status' => $r['status'],
                         'description' => $r['description'] ?: null,
                     ]);
+
+                    if ($newStock > 0) {
+                        \App\Models\StockMovement::create([
+                            'product_id' => $newProd->id,
+                            'type' => \App\Models\StockMovement::TYPE_OPENING_STOCK,
+                            'quantity' => $newStock,
+                            'stock_before' => 0,
+                            'stock_after' => $newStock,
+                            'unit_cost' => (float) $newProd->wholesale_cost,
+                            'reference_type' => 'BatchImport',
+                            'reason' => "Initial stock from Excel batch import",
+                            'created_by' => auth()->user()?->name ?? 'Admin Import',
+                        ]);
+                    }
+
                     $imported++;
                 }
             }

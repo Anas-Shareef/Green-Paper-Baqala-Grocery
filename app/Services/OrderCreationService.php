@@ -182,8 +182,9 @@ class OrderCreationService
                     throw new \Exception("Product '{$product->name}' is currently unavailable.");
                 }
 
-                if ($product->stock_quantity < $itemData['quantity']) {
-                    throw new \Exception("Insufficient stock for '{$product->name}'. Available: {$product->stock_quantity}");
+                $availableStock = max(0, (int) $product->stock_quantity - (int) $product->reserved_quantity);
+                if ($availableStock < $itemData['quantity']) {
+                    throw new \Exception("Insufficient available stock for '{$product->name}'. Available: {$availableStock}, Requested: {$itemData['quantity']}");
                 }
 
                 $unitPrice = (float) ($product->sale_price ?: $product->retail_price ?: $product->price);
@@ -225,7 +226,7 @@ class OrderCreationService
                 'total_amount' => $grandTotal,
                 'payment_method' => 'cod',
                 'payment_status' => 'pending',
-                'status' => 'awaiting_whatsapp',
+                'status' => 'pending',
                 'whatsapp_status' => 'prepared',
                 'idempotency_key' => $data['idempotency_key'] ?? (string) Str::uuid(),
                 'order_source' => $data['order_source'] ?? 'PWA',
@@ -248,7 +249,7 @@ class OrderCreationService
                 \Illuminate\Support\Facades\Log::warning('AdminNotification in order tx warning: ' . $e->getMessage());
             }
 
-            // 7. Create Order Items & Deduct Stock
+            // 7. Create Order Items & Reserve Stock
             foreach ($itemsToCreate as $i) {
                 OrderItem::create([
                     'order_id' => $order->id,
@@ -260,21 +261,19 @@ class OrderCreationService
                     'total' => $i['line_total'],
                 ]);
 
-                $prevQty = $i['product']->stock_quantity;
-                $newQty = max(0, $prevQty - $i['quantity']);
-                $i['product']->update(['stock_quantity' => $newQty]);
+                // Atomically increment reserved_quantity; physical stock_quantity on shelf remains untouched
+                $i['product']->reserveStock($i['quantity']);
 
                 StockMovement::create([
                     'product_id' => $i['product']->id,
-                    'type' => 'reservation',
-                    'quantity' => -$i['quantity'],
-                    'stock_before' => $prevQty,
-                    'stock_after' => $newQty,
-                    'previous_quantity' => $prevQty,
-                    'new_quantity' => $newQty,
-                    'reference_type' => 'order',
+                    'type' => StockMovement::TYPE_RESERVATION,
+                    'quantity' => $i['quantity'],
+                    'stock_before' => (int) $i['product']->stock_quantity,
+                    'stock_after' => (int) $i['product']->stock_quantity,
+                    'reference_type' => 'Order',
                     'reference_id' => $order->id,
                     'reason' => "Customer Order Stock Reservation #{$order->order_number}",
+                    'created_by' => 'Online Customer',
                 ]);
             }
 

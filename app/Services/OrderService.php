@@ -50,9 +50,10 @@ class OrderService
                     continue;
                 }
 
-                // Verify stock availability
-                if ($product->stock_quantity < $qty) {
-                    throw new \Exception("Product '{$product->name}' only has {$product->stock_quantity} units available.");
+                // Verify available stock availability
+                $availableStock = max(0, (int) $product->stock_quantity - (int) $product->reserved_quantity);
+                if ($availableStock < $qty) {
+                    throw new \Exception("Product '{$product->name}' only has {$availableStock} available units.");
                 }
 
                 $itemTotal = (float) ($product->retail_price * $qty);
@@ -115,7 +116,7 @@ class OrderService
                 'delivered_at' => ($source === 'POS') ? now() : null,
             ]);
 
-            // Save order items & adjust stock
+            // Save order items & handle stock (POS = instant sale, Online = reservation)
             foreach ($preparedItems as $prep) {
                 /** @var Product $product */
                 $product = $prep['product'];
@@ -131,25 +132,39 @@ class OrderService
                     'total' => $prep['total'],
                 ]);
 
-                // Deduct stock and log stock movement
-                $stockBefore = $product->stock_quantity;
-                $stockAfter = $stockBefore - $qty;
+                if ($source === 'POS') {
+                    // Instant physical sale for POS counter checkout
+                    $stockBefore = (int) $product->stock_quantity;
+                    $stockAfter = max(0, $stockBefore - $qty);
+                    $product->update(['stock_quantity' => $stockAfter]);
 
-                $product->update([
-                    'stock_quantity' => $stockAfter,
-                ]);
+                    StockMovement::create([
+                        'product_id' => $product->id,
+                        'type' => StockMovement::TYPE_SALE,
+                        'quantity' => -$qty,
+                        'stock_before' => $stockBefore,
+                        'stock_after' => $stockAfter,
+                        'reference_type' => 'Order',
+                        'reference_id' => $order->id,
+                        'reason' => "POS Sale #{$orderNumber}",
+                        'created_by' => $options['user_name'] ?? 'POS Cashier',
+                    ]);
+                } else {
+                    // Reserve stock for online/delivery order
+                    $product->reserveStock($qty);
 
-                StockMovement::create([
-                    'product_id' => $product->id,
-                    'type' => ($source === 'POS') ? 'POS Sale' : 'Online Order',
-                    'quantity' => -$qty,
-                    'stock_before' => $stockBefore,
-                    'stock_after' => $stockAfter,
-                    'reference_type' => 'Order',
-                    'reference_id' => $order->id,
-                    'reason' => "Order #{$orderNumber} placed via {$source}",
-                    'created_by' => $options['user_name'] ?? 'System/Customer',
-                ]);
+                    StockMovement::create([
+                        'product_id' => $product->id,
+                        'type' => StockMovement::TYPE_RESERVATION,
+                        'quantity' => $qty,
+                        'stock_before' => (int) $product->stock_quantity,
+                        'stock_after' => (int) $product->stock_quantity,
+                        'reference_type' => 'Order',
+                        'reference_id' => $order->id,
+                        'reason' => "Order #{$orderNumber} placed via {$source}",
+                        'created_by' => $options['user_name'] ?? 'System/Customer',
+                    ]);
+                }
             }
 
             $this->logActivity($order, 'order_created', "Order #{$order->order_number} created via {$source}");
@@ -309,12 +324,43 @@ class OrderService
     }
 
     /**
-     * 7. Mark Delivered
+     * 7. Mark Delivered & Finalize Physical Sale
      */
     public function deliverOrder(Order $order, ?User $actor = null): Order
     {
         return DB::transaction(function () use ($order, $actor) {
+            $order = Order::lockForUpdate()->with('items')->findOrFail($order->id);
+            if ($order->status === 'delivered') {
+                return $order;
+            }
+
             $fromStatus = $order->status;
+
+            // Finalize physical sale: decrement physical stock and clear reservation
+            if ($order->order_source !== 'POS') {
+                foreach ($order->items as $item) {
+                    if ($item->product_id) {
+                        $product = Product::lockForUpdate()->find($item->product_id);
+                        if ($product) {
+                            $stockBefore = (int) $product->stock_quantity;
+                            $product->finalizeSale($item->quantity);
+
+                            StockMovement::create([
+                                'product_id' => $product->id,
+                                'type' => StockMovement::TYPE_SALE,
+                                'quantity' => -$item->quantity,
+                                'stock_before' => $stockBefore,
+                                'stock_after' => (int) $product->stock_quantity,
+                                'reference_type' => 'Order',
+                                'reference_id' => $order->id,
+                                'reason' => "Order delivered #{$order->order_number} to {$order->customer_villa}",
+                                'created_by' => $actor?->name ?? 'Delivery Staff',
+                            ]);
+                        }
+                    }
+                }
+            }
+
             $order->update([
                 'status' => 'delivered',
                 'delivered_at' => now(),
@@ -361,7 +407,52 @@ class OrderService
     public function failDelivery(Order $order, string $reason, ?string $notes = null, ?User $actor = null): Order
     {
         return DB::transaction(function () use ($order, $reason, $notes, $actor) {
+            $order = Order::lockForUpdate()->with('items')->findOrFail($order->id);
+            if ($order->status === 'failed_delivery') {
+                return $order;
+            }
+
             $fromStatus = $order->status;
+
+            // If order was already finalized as delivered, return stock; otherwise release reservation
+            foreach ($order->items as $item) {
+                if ($item->product_id) {
+                    $product = Product::lockForUpdate()->find($item->product_id);
+                    if ($product) {
+                        if ($fromStatus === 'delivered') {
+                            $stockBefore = (int) $product->stock_quantity;
+                            $product->returnDeliveredStock($item->quantity);
+
+                            StockMovement::create([
+                                'product_id' => $product->id,
+                                'type' => StockMovement::TYPE_CUSTOMER_RETURN,
+                                'quantity' => $item->quantity,
+                                'stock_before' => $stockBefore,
+                                'stock_after' => (int) $product->stock_quantity,
+                                'reference_type' => 'Order',
+                                'reference_id' => $order->id,
+                                'reason' => "Delivery failed return #{$order->order_number}: {$reason}",
+                                'created_by' => $actor?->name ?? 'Delivery Staff',
+                            ]);
+                        } else {
+                            $product->releaseReservation($item->quantity);
+
+                            StockMovement::create([
+                                'product_id' => $product->id,
+                                'type' => StockMovement::TYPE_RESERVATION_RELEASE,
+                                'quantity' => -$item->quantity,
+                                'stock_before' => (int) $product->stock_quantity,
+                                'stock_after' => (int) $product->stock_quantity,
+                                'reference_type' => 'Order',
+                                'reference_id' => $order->id,
+                                'reason' => "Reservation released (Failed Delivery) #{$order->order_number}: {$reason}",
+                                'created_by' => $actor?->name ?? 'Delivery Staff',
+                            ]);
+                        }
+                    }
+                }
+            }
+
             $order->update([
                 'status' => 'failed_delivery',
                 'failed_delivery_at' => now(),
@@ -380,40 +471,53 @@ class OrderService
     }
 
     /**
-     * 10. Cancel Order & Restore Stock Atomically
+     * 10. Cancel Order & Release Stock Atomically
      */
     public function cancelOrder(Order $order, string $reason = 'Cancelled by admin', ?User $actor = null): Order
     {
         return DB::transaction(function () use ($order, $reason, $actor) {
+            $order = Order::lockForUpdate()->with('items')->findOrFail($order->id);
             if ($order->status === 'cancelled') {
                 return $order;
             }
 
             $fromStatus = $order->status;
 
-            // Restore stock if previously deducted/reserved
+            // If order was already finalized as delivered, return physical stock; otherwise release reservation
             foreach ($order->items as $item) {
                 if ($item->product_id) {
                     $product = Product::lockForUpdate()->find($item->product_id);
                     if ($product) {
-                        $stockBefore = $product->stock_quantity;
-                        $stockAfter = $stockBefore + $item->quantity;
+                        if ($fromStatus === 'delivered') {
+                            $stockBefore = (int) $product->stock_quantity;
+                            $product->returnDeliveredStock($item->quantity);
 
-                        $product->update([
-                            'stock_quantity' => $stockAfter,
-                        ]);
+                            StockMovement::create([
+                                'product_id' => $product->id,
+                                'type' => StockMovement::TYPE_CUSTOMER_RETURN,
+                                'quantity' => $item->quantity,
+                                'stock_before' => $stockBefore,
+                                'stock_after' => (int) $product->stock_quantity,
+                                'reference_type' => 'Order',
+                                'reference_id' => $order->id,
+                                'reason' => "Customer return from Cancelled Order #{$order->order_number}: {$reason}",
+                                'created_by' => $actor?->name ?? 'Admin',
+                            ]);
+                        } else {
+                            $product->releaseReservation($item->quantity);
 
-                        StockMovement::create([
-                            'product_id' => $product->id,
-                            'type' => 'Return',
-                            'quantity' => $item->quantity,
-                            'stock_before' => $stockBefore,
-                            'stock_after' => $stockAfter,
-                            'reference_type' => 'Order',
-                            'reference_id' => $order->id,
-                            'reason' => "Restocked from Cancelled Order #{$order->order_number}: {$reason}",
-                            'created_by' => $actor?->name ?? auth()->user()?->name ?? 'System',
-                        ]);
+                            StockMovement::create([
+                                'product_id' => $product->id,
+                                'type' => StockMovement::TYPE_RESERVATION_RELEASE,
+                                'quantity' => -$item->quantity,
+                                'stock_before' => (int) $product->stock_quantity,
+                                'stock_after' => (int) $product->stock_quantity,
+                                'reference_type' => 'Order',
+                                'reference_id' => $order->id,
+                                'reason' => "Reservation released for Cancelled Order #{$order->order_number}: {$reason}",
+                                'created_by' => $actor?->name ?? 'Admin',
+                            ]);
+                        }
                     }
                 }
             }
@@ -439,30 +543,26 @@ class OrderService
     public function expireOrder(Order $order, ?User $actor = null): Order
     {
         return DB::transaction(function () use ($order, $actor) {
+            $order = Order::lockForUpdate()->with('items')->findOrFail($order->id);
             if (!in_array($order->status, ['awaiting_whatsapp', 'pending'])) {
                 return $order;
             }
 
             $fromStatus = $order->status;
 
-            // Release reserved stock back into inventory
+            // Release reserved stock back into available pool
             foreach ($order->items as $item) {
                 if ($item->product_id) {
                     $product = Product::lockForUpdate()->find($item->product_id);
                     if ($product) {
-                        $stockBefore = $product->stock_quantity;
-                        $stockAfter = $stockBefore + $item->quantity;
-
-                        $product->update([
-                            'stock_quantity' => $stockAfter,
-                        ]);
+                        $product->releaseReservation($item->quantity);
 
                         StockMovement::create([
                             'product_id' => $product->id,
-                            'type' => 'Release',
-                            'quantity' => $item->quantity,
-                            'stock_before' => $stockBefore,
-                            'stock_after' => $stockAfter,
+                            'type' => StockMovement::TYPE_RESERVATION_RELEASE,
+                            'quantity' => -$item->quantity,
+                            'stock_before' => (int) $product->stock_quantity,
+                            'stock_after' => (int) $product->stock_quantity,
                             'reference_type' => 'Order',
                             'reference_id' => $order->id,
                             'reason' => "Released reservation for Expired Order #{$order->order_number}",

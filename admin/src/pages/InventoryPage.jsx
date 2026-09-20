@@ -2,8 +2,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import { 
   Warehouse, Plus, RefreshCw, AlertTriangle, ArrowUpRight, ArrowDownRight,
   Search, Upload, Download, Trash2, Edit2, CheckSquare, Square, Tags,
-  Image, X, Check, CheckCircle, AlertCircle, Eye, ChevronRight, Layers,
-  FileSpreadsheet, HelpCircle, Archive, ShieldCheck
+  Image, X, Check, CheckCircle, AlertCircle, Eye, ChevronRight, ChevronLeft, Layers,
+  FileSpreadsheet, HelpCircle, Archive, ShieldCheck, History, Scale, FileText, CheckCircle2
 } from 'lucide-react';
 import { adminApi } from '../services/api';
 
@@ -19,6 +19,31 @@ export function InventoryPage() {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [stockStatusFilter, setStockStatusFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+
+  // Pagination State (PRD Section 33)
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(25);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [fromItem, setFromItem] = useState(0);
+  const [toItem, setToItem] = useState(0);
+
+  // Product Stock Ledger Drawer (PRD Section 35)
+  const [ledgerProduct, setLedgerProduct] = useState(null);
+  const [ledgerMovements, setLedgerMovements] = useState([]);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [ledgerPage, setLedgerPage] = useState(1);
+  const [ledgerTotalPages, setLedgerTotalPages] = useState(1);
+  const [ledgerTotal, setLedgerTotal] = useState(0);
+
+  // Stock Reconciliation Diagnostic Tool (PRD Section 62)
+  const [reconcileModalOpen, setReconcileModalOpen] = useState(false);
+  const [reconcileLoading, setReconcileLoading] = useState(false);
+  const [reconcileReport, setReconcileReport] = useState(null);
+  const [correctingProduct, setCorrectingProduct] = useState(null);
+  const [correctionTarget, setCorrectionTarget] = useState('');
+  const [correctionReason, setCorrectionReason] = useState('');
+  const [correctionSubmitting, setCorrectionSubmitting] = useState(false);
 
   // Row Selection for Bulk Actions
   const [selectedProductIds, setSelectedProductIds] = useState([]);
@@ -102,19 +127,29 @@ export function InventoryPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Load Products
-  const fetchProducts = async () => {
+  // Load Products with Server-Side Pagination (PRD Section 33)
+  const fetchProducts = async (page = currentPage, pageSize = perPage) => {
     setProductsLoading(true);
     try {
-      const params = {};
+      const params = {
+        page,
+        per_page: pageSize,
+      };
       if (debouncedSearch) params.q = debouncedSearch;
       if (selectedCategory) params.category_id = selectedCategory;
       if (stockStatusFilter) params.stock_status = stockStatusFilter;
       if (statusFilter) params.status = statusFilter;
 
       const prodRes = await adminApi.getProducts(params);
-      if (prodRes && prodRes.data) {
-        setProducts(prodRes.data.data || prodRes.data || []);
+      if (prodRes) {
+        const items = Array.isArray(prodRes.data) ? prodRes.data : (prodRes.data?.data || []);
+        const meta = prodRes.meta || prodRes.data?.meta || {};
+        setProducts(items);
+        setCurrentPage(meta.current_page || page);
+        setTotalPages(meta.last_page || 1);
+        setTotalProducts(meta.total !== undefined ? meta.total : items.length);
+        setFromItem(meta.from || (items.length > 0 ? (page - 1) * pageSize + 1 : 0));
+        setToItem(meta.to || (items.length > 0 ? (page - 1) * pageSize + items.length : 0));
       }
 
       // Cache categories: only fetch once if empty
@@ -131,6 +166,73 @@ export function InventoryPage() {
     }
   };
 
+  // Open Product Ledger Drawer
+  const handleOpenLedger = async (product, page = 1) => {
+    setLedgerProduct(product);
+    setLedgerLoading(true);
+    setLedgerPage(page);
+    try {
+      const res = await adminApi.getProductLedger(product.id, { page, per_page: 15 });
+      if (res && res.data) {
+        setLedgerMovements(res.data.movements || []);
+        setLedgerTotalPages(res.data.pagination?.last_page || 1);
+        setLedgerTotal(res.data.pagination?.total || 0);
+      }
+    } catch (e) {
+      console.error('Failed to load product ledger:', e);
+      setAlertMsg({ type: 'error', text: 'Failed to load product ledger: ' + (e.response?.data?.message || e.message) });
+    } finally {
+      setLedgerLoading(false);
+    }
+  };
+
+  // Open Reconciliation Modal
+  const handleOpenReconciliation = async () => {
+    setReconcileModalOpen(true);
+    setReconcileLoading(true);
+    try {
+      const res = await adminApi.getReconciliationReport();
+      if (res && res.data) {
+        setReconcileReport(res.data);
+      }
+    } catch (e) {
+      console.error('Failed to load reconciliation report:', e);
+      setAlertMsg({ type: 'error', text: 'Failed to load reconciliation report: ' + (e.response?.data?.message || e.message) });
+    } finally {
+      setReconcileLoading(false);
+    }
+  };
+
+  // Apply Reconciliation Correction
+  const handleApplyCorrection = async (e) => {
+    e.preventDefault();
+    if (!correctingProduct) return;
+    if (!correctionReason.trim()) {
+      alert('A valid reason is required for stock correction.');
+      return;
+    }
+
+    setCorrectionSubmitting(true);
+    try {
+      const res = await adminApi.correctReconciliation(correctingProduct.id, {
+        corrected_quantity: parseInt(correctionTarget, 10),
+        reason: correctionReason.trim(),
+      });
+      if (res && res.success) {
+        setAlertMsg({ type: 'success', text: `Discrepancy for '${correctingProduct.name}' corrected successfully.` });
+        setCorrectingProduct(null);
+        setCorrectionReason('');
+        setCorrectionTarget('');
+        handleOpenReconciliation();
+        fetchProducts(currentPage, perPage);
+      }
+    } catch (e) {
+      alert(e.response?.data?.message || 'Correction failed');
+    } finally {
+      setCorrectionSubmitting(false);
+    }
+  };
+
   // Load Stock Movements (Lazy loaded)
   const fetchMovements = async () => {
     try {
@@ -144,7 +246,8 @@ export function InventoryPage() {
   };
 
   useEffect(() => {
-    fetchProducts();
+    setCurrentPage(1);
+    fetchProducts(1, perPage);
   }, [debouncedSearch, selectedCategory, stockStatusFilter, statusFilter]);
 
   useEffect(() => {
@@ -528,6 +631,15 @@ export function InventoryPage() {
           </a>
 
           <button
+            onClick={handleOpenReconciliation}
+            className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+            title="Detect & Correct Stock Ledger Discrepancies"
+          >
+            <ShieldCheck className="w-4 h-4 text-indigo-600" />
+            Reconcile Stock
+          </button>
+
+          <button
             onClick={() => {
               setAdjustForm({ product_id: products[0]?.id || '', type: 'Correction', quantity: '10', reason: 'Stock Count Correction' });
               setAdjustModalOpen(true);
@@ -727,7 +839,9 @@ export function InventoryPage() {
                       <th className="py-3 px-4">Product Name & SKU</th>
                       <th className="py-3 px-3">Barcode</th>
                       <th className="py-3 px-3">Category</th>
-                      <th className="py-3 px-3 text-center">Stock Level</th>
+                      <th className="py-3 px-3 text-center" title="Current physical units on shelf">Physical</th>
+                      <th className="py-3 px-3 text-center" title="Units locked in pending/active online orders">Reserved</th>
+                      <th className="py-3 px-3 text-center" title="Sellable stock available for new orders">Available</th>
                       <th className="py-3 px-3 text-right">Cost (AED)</th>
                       <th className="py-3 px-3 text-right">Price (AED)</th>
                       <th className="py-3 px-3 text-center">Status</th>
@@ -737,8 +851,12 @@ export function InventoryPage() {
                   <tbody className="divide-y divide-slate-100 font-medium">
                     {products.map((p) => {
                       const isSelected = selectedProductIds.includes(p.id);
-                      const isOutOfStock = p.stock_quantity <= 0;
-                      const isLowStock = p.stock_quantity <= (p.minimum_stock_level || 5) && !isOutOfStock;
+                      const physical = Number(p.stock_quantity ?? 0);
+                      const reserved = Number(p.reserved_quantity ?? 0);
+                      const available = Math.max(0, physical - reserved);
+                      const minStock = Number(p.minimum_stock_level ?? 5);
+                      const isOutOfStock = available <= 0;
+                      const isLowStock = available <= minStock && !isOutOfStock;
                       const imgSrc = p.image_url || p.image || null;
 
                       return (
@@ -795,14 +913,30 @@ export function InventoryPage() {
                             </span>
                           </td>
 
-                          {/* Stock Level */}
+                          {/* Physical Stock */}
+                          <td className="py-3 px-3 text-center font-mono font-bold text-slate-800">
+                            {physical}
+                          </td>
+
+                          {/* Reserved Stock */}
+                          <td className="py-3 px-3 text-center font-mono">
+                            {reserved > 0 ? (
+                              <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-amber-100 text-amber-900 border border-amber-300">
+                                {reserved}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">0</span>
+                            )}
+                          </td>
+
+                          {/* Available Stock */}
                           <td className="py-3 px-3 text-center font-mono">
                             <span className={`px-2.5 py-1 rounded-full text-xs font-black ${
                               isOutOfStock
                                 ? 'bg-rose-100 text-rose-800 border border-rose-200'
                                 : (isLowStock ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-emerald-100 text-emerald-800 border border-emerald-200')
                             }`}>
-                              {p.stock_quantity}
+                              {available}
                             </span>
                           </td>
 
@@ -826,7 +960,14 @@ export function InventoryPage() {
                           </td>
 
                           {/* Actions */}
-                          <td className="py-3 px-4 text-right space-x-1">
+                          <td className="py-3 px-4 text-right space-x-1 whitespace-nowrap">
+                            <button
+                              onClick={() => handleOpenLedger(p)}
+                              className="p-1.5 text-slate-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
+                              title="View stock movement ledger history"
+                            >
+                              <History className="w-3.5 h-3.5" />
+                            </button>
                             <button
                               onClick={() => handleOpenProductModal(p)}
                               className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors"
@@ -838,7 +979,7 @@ export function InventoryPage() {
                               onClick={async () => {
                                 if (window.confirm(`Delete or archive '${p.name}'?`)) {
                                   await adminApi.deleteProduct(p.id);
-                                  fetchProducts();
+                                  fetchProducts(currentPage, perPage);
                                 }
                               }}
                               className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
@@ -855,6 +996,64 @@ export function InventoryPage() {
                 </table>
               </div>
             )}
+
+            {/* Pagination Controls Bar (PRD Section 33) */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 font-medium">
+              <div className="flex items-center gap-3">
+                <span>
+                  Showing <strong className="text-slate-800">{totalProducts > 0 ? fromItem : 0}</strong> to{' '}
+                  <strong className="text-slate-800">{toItem}</strong> of{' '}
+                  <strong className="text-slate-800">{totalProducts}</strong> products
+                </span>
+                <div className="flex items-center gap-1.5 ml-2">
+                  <span>Per page:</span>
+                  <select
+                    value={perPage}
+                    onChange={(e) => {
+                      const newSize = parseInt(e.target.value, 10);
+                      setPerPage(newSize);
+                      setCurrentPage(1);
+                      fetchProducts(1, newSize);
+                    }}
+                    className="px-2 py-1 bg-white border border-slate-300 rounded-lg text-xs font-semibold focus:outline-none cursor-pointer"
+                  >
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={currentPage <= 1 || productsLoading}
+                  onClick={() => {
+                    const p = currentPage - 1;
+                    setCurrentPage(p);
+                    fetchProducts(p, perPage);
+                  }}
+                  className="p-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  title="Previous Page"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="px-3 py-1 font-bold text-slate-700 bg-white border border-slate-200 rounded-lg shadow-2xs">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  disabled={currentPage >= totalPages || productsLoading}
+                  onClick={() => {
+                    const p = currentPage + 1;
+                    setCurrentPage(p);
+                    fetchProducts(p, perPage);
+                  }}
+                  className="p-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  title="Next Page"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
           </div>
 
         </div>
@@ -1708,6 +1907,404 @@ export function InventoryPage() {
                 onError={(e) => { e.target.onerror = null; e.target.src = fallbackImage; }}
               />
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL / DRAWER: PRODUCT STOCK LEDGER (PRD Section 35) */}
+      {ledgerProduct && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-end">
+          <div className="bg-white h-full w-full max-w-3xl shadow-2xl border-l border-slate-200 flex flex-col animate-in slide-in-from-right duration-300">
+            
+            {/* Drawer Header */}
+            <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/80">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-700">
+                  <History className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-slate-900 tracking-tight flex items-center gap-2">
+                    {ledgerProduct.name}
+                    <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-slate-200 text-slate-700">
+                      {ledgerProduct.sku || `ID #${ledgerProduct.id}`}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Immutable chronological stock movement ledger
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setLedgerProduct(null)}
+                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Stock Snapshot Cards */}
+            <div className="p-5 grid grid-cols-3 gap-3 border-b border-slate-100 bg-white">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Physical Stock</div>
+                <div className="text-xl font-black text-slate-800 font-mono mt-0.5">
+                  {ledgerProduct.stock_quantity ?? 0}
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Units on shelf</div>
+              </div>
+
+              <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200">
+                <div className="text-[10px] uppercase font-bold text-amber-700 tracking-wider">Reserved Stock</div>
+                <div className="text-xl font-black text-amber-900 font-mono mt-0.5">
+                  {ledgerProduct.reserved_quantity ?? 0}
+                </div>
+                <div className="text-[10px] text-amber-600 mt-0.5">Active online orders</div>
+              </div>
+
+              <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200">
+                <div className="text-[10px] uppercase font-bold text-emerald-700 tracking-wider">Available Stock</div>
+                <div className="text-xl font-black text-emerald-800 font-mono mt-0.5">
+                  {Math.max(0, (ledgerProduct.stock_quantity ?? 0) - (ledgerProduct.reserved_quantity ?? 0))}
+                </div>
+                <div className="text-[10px] text-emerald-600 mt-0.5">Sellable quantity</div>
+              </div>
+            </div>
+
+            {/* Ledger Movements List */}
+            <div className="flex-1 overflow-y-auto p-5">
+              {ledgerLoading ? (
+                <div className="p-12 text-center text-slate-400 text-xs font-medium space-y-2">
+                  <RefreshCw className="w-6 h-6 animate-spin mx-auto text-indigo-500" />
+                  <div>Loading ledger entries...</div>
+                </div>
+              ) : ledgerMovements.length === 0 ? (
+                <div className="p-12 text-center text-slate-400 text-xs space-y-2">
+                  <FileText className="w-8 h-8 text-slate-300 mx-auto" />
+                  <div className="font-bold text-slate-600">No stock movements found</div>
+                  <p>Every purchase receipt, order reservation, and adjustment will appear here.</p>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-slate-200/80 overflow-hidden shadow-2xs">
+                  <table className="w-full text-left text-xs font-mono">
+                    <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] border-b border-slate-200/60 font-bold">
+                      <tr>
+                        <th className="py-2.5 px-3">Type</th>
+                        <th className="py-2.5 px-3 text-center">Qty Diff</th>
+                        <th className="py-2.5 px-3">Before &rarr; After</th>
+                        <th className="py-2.5 px-3">Unit Cost</th>
+                        <th className="py-2.5 px-3">Reason / Ref</th>
+                        <th className="py-2.5 px-3">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium">
+                      {ledgerMovements.map((m) => {
+                        const isPositive = Number(m.quantity) > 0;
+                        const typeNormalized = (m.type || '').toLowerCase();
+                        
+                        let badgeClass = 'bg-slate-100 text-slate-700';
+                        if (typeNormalized.includes('purchase') || typeNormalized === 'grn') {
+                          badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+                        } else if (typeNormalized.includes('sale')) {
+                          badgeClass = 'bg-blue-100 text-blue-800 border-blue-300';
+                        } else if (typeNormalized === 'reservation') {
+                          badgeClass = 'bg-amber-100 text-amber-800 border-amber-300';
+                        } else if (typeNormalized.includes('release')) {
+                          badgeClass = 'bg-indigo-100 text-indigo-800 border-indigo-300';
+                        } else if (typeNormalized.includes('damaged') || typeNormalized.includes('expired')) {
+                          badgeClass = 'bg-rose-100 text-rose-800 border-rose-300';
+                        } else if (typeNormalized.includes('correction')) {
+                          badgeClass = 'bg-purple-100 text-purple-800 border-purple-300';
+                        } else if (typeNormalized.includes('return')) {
+                          badgeClass = 'bg-teal-100 text-teal-800 border-teal-300';
+                        }
+
+                        return (
+                          <tr key={m.id} className="hover:bg-slate-50/70 transition-colors">
+                            <td className="py-2.5 px-3 font-sans">
+                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase border ${badgeClass}`}>
+                                {m.type?.replace('_', ' ')}
+                              </span>
+                            </td>
+                            <td className={`py-2.5 px-3 text-center font-black ${isPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
+                              {isPositive ? `+${m.quantity}` : m.quantity}
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-600">
+                              {m.stock_before} &rarr; <strong className="text-slate-900">{m.stock_after}</strong>
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-500">
+                              AED {parseFloat(m.unit_cost || 0).toFixed(2)}
+                            </td>
+                            <td className="py-2.5 px-3 font-sans text-slate-700 max-w-xs truncate">
+                              <span title={m.reason}>{m.reason || '—'}</span>
+                              {m.reference_type && (
+                                <span className="ml-1 text-[10px] text-slate-400">
+                                  ({m.reference_type} #{m.reference_id})
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-400 text-[11px]">
+                              {m.created_at ? new Date(m.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Drawer Footer with Pagination */}
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
+              <div>
+                Total: <strong className="text-slate-800">{ledgerTotal}</strong> recorded movements
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={ledgerPage <= 1 || ledgerLoading}
+                  onClick={() => handleOpenLedger(ledgerProduct, ledgerPage - 1)}
+                  className="px-2.5 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-slate-700"
+                >
+                  &larr; Prev
+                </button>
+                <span className="font-bold text-slate-700">
+                  Page {ledgerPage} of {ledgerTotalPages}
+                </span>
+                <button
+                  disabled={ledgerPage >= ledgerTotalPages || ledgerLoading}
+                  onClick={() => handleOpenLedger(ledgerProduct, ledgerPage + 1)}
+                  className="px-2.5 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-slate-700"
+                >
+                  Next &rarr;
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: STOCK RECONCILIATION DIAGNOSTIC (PRD Section 62) */}
+      {reconcileModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-4xl w-full p-6 shadow-2xl border border-slate-200 space-y-5 my-8">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-700">
+                  <Scale className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-lg text-slate-900 tracking-tight">
+                    Inventory Reconciliation Diagnostic
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Audits physical shelf quantities against chronological stock movement ledgers.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setReconcileModalOpen(false);
+                  setCorrectingProduct(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 p-2 rounded-xl"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Diagnostic Content */}
+            {reconcileLoading ? (
+              <div className="p-12 text-center text-slate-400 text-xs font-medium space-y-2">
+                <RefreshCw className="w-6 h-6 animate-spin mx-auto text-indigo-500" />
+                <div>Running diagnostic reconciliation check...</div>
+              </div>
+            ) : reconcileReport ? (
+              <div className="space-y-4">
+                
+                {/* Summary Metrics */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
+                    <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Catalog Audited</div>
+                    <div className="text-xl font-black text-slate-800 font-mono mt-1">
+                      {reconcileReport.summary?.total_products ?? 0}
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">Active catalog items</div>
+                  </div>
+
+                  <div className={`p-3.5 rounded-2xl border ${
+                    (reconcileReport.summary?.discrepancies_count ?? 0) > 0
+                      ? 'bg-rose-50 border-rose-200 text-rose-900'
+                      : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  }`}>
+                    <div className="text-[10px] uppercase font-bold tracking-wider opacity-75">
+                      Discrepancies Found
+                    </div>
+                    <div className="text-xl font-black font-mono mt-1">
+                      {reconcileReport.summary?.discrepancies_count ?? 0}
+                    </div>
+                    <div className="text-[10px] mt-0.5 opacity-75">
+                      {(reconcileReport.summary?.discrepancies_count ?? 0) > 0 ? 'Requires attention' : 'Clean audit match'}
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 bg-indigo-50/60 rounded-2xl border border-indigo-200">
+                    <div className="text-[10px] uppercase font-bold text-indigo-700 tracking-wider">Movements Audited</div>
+                    <div className="text-xl font-black text-indigo-900 font-mono mt-1">
+                      {reconcileReport.summary?.total_movements_checked ?? 0}
+                    </div>
+                    <div className="text-[10px] text-indigo-600 mt-0.5">Immutable ledger records</div>
+                  </div>
+                </div>
+
+                {/* Discrepancies List / Clean State */}
+                {reconcileReport.discrepancies?.length === 0 ? (
+                  <div className="p-8 bg-emerald-50/60 border border-emerald-200 rounded-2xl text-center space-y-2">
+                    <CheckCircle2 className="w-10 h-10 text-emerald-600 mx-auto" />
+                    <div className="font-black text-emerald-900 text-sm">100% Reconciliation Integrity</div>
+                    <p className="text-xs text-emerald-700 max-w-md mx-auto">
+                      All physical shelf quantities match computed stock movement ledgers perfectly. Zero untracked variances found.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="text-xs font-bold text-slate-800 flex items-center justify-between">
+                      <span>Discrepant Products ({reconcileReport.discrepancies.length})</span>
+                      <span className="text-[11px] text-slate-400 font-normal">
+                        Select a product to apply an audit-safe correction
+                      </span>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold border-b border-slate-200">
+                          <tr>
+                            <th className="py-2.5 px-3">Product</th>
+                            <th className="py-2.5 px-3 text-center font-mono">Current Stock</th>
+                            <th className="py-2.5 px-3 text-center font-mono">Ledger Sum</th>
+                            <th className="py-2.5 px-3 text-center font-mono">Variance</th>
+                            <th className="py-2.5 px-3 text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-medium">
+                          {reconcileReport.discrepancies.map((d) => (
+                            <tr key={d.product_id} className="hover:bg-slate-50/70 transition-colors">
+                              <td className="py-2.5 px-3">
+                                <div className="font-extrabold text-slate-900">{d.product_name}</div>
+                                <div className="text-[11px] font-mono text-slate-400">SKU: {d.sku}</div>
+                              </td>
+                              <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-800">
+                                {d.current_stock}
+                              </td>
+                              <td className="py-2.5 px-3 text-center font-mono font-bold text-indigo-700">
+                                {d.computed_stock}
+                              </td>
+                              <td className={`py-2.5 px-3 text-center font-mono font-black ${
+                                d.difference > 0 ? 'text-emerald-600' : 'text-rose-600'
+                              }`}>
+                                {d.difference > 0 ? `+${d.difference}` : d.difference}
+                              </td>
+                              <td className="py-2.5 px-3 text-right">
+                                <button
+                                  onClick={() => {
+                                    setCorrectingProduct(d);
+                                    setCorrectionTarget(d.computed_stock.toString());
+                                    setCorrectionReason(`Reconciliation variance correction: shelf was ${d.current_stock}, ledger computed ${d.computed_stock}`);
+                                  }}
+                                  className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-[11px] transition-colors shadow-xs"
+                                >
+                                  Correct
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-form: Apply Correction */}
+                {correctingProduct && (
+                  <div className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-2xl space-y-3 animate-in fade-in duration-200 text-xs">
+                    <div className="font-extrabold text-indigo-950 flex items-center justify-between">
+                      <span>Apply Audit Correction: {correctingProduct.product_name}</span>
+                      <button
+                        onClick={() => setCorrectingProduct(null)}
+                        className="text-slate-400 hover:text-slate-600"
+                      >
+                        &times;
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleApplyCorrection} className="space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Target Stock Quantity *</label>
+                          <input
+                            type="number"
+                            required
+                            min="0"
+                            value={correctionTarget}
+                            onChange={(e) => setCorrectionTarget(e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono font-bold text-slate-800"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-bold text-slate-700 mb-1">Audit Reason * (Mandatory)</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. Physical inventory count verified by Store Manager"
+                            value={correctionReason}
+                            onChange={(e) => setCorrectionReason(e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-medium text-slate-800"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setCorrectingProduct(null)}
+                          className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl font-semibold text-slate-600 hover:bg-slate-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={correctionSubmitting}
+                          className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold flex items-center gap-1.5 shadow-sm shadow-indigo-600/30 disabled:opacity-50"
+                        >
+                          {correctionSubmitting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                          Commit Audit Correction
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+
+              </div>
+            ) : null}
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100 text-xs text-slate-500">
+              <button
+                onClick={handleOpenReconciliation}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold flex items-center gap-1.5 transition-colors"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Re-Run Check
+              </button>
+              <button
+                onClick={() => setReconcileModalOpen(false)}
+                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold transition-colors"
+              >
+                Done
+              </button>
+            </div>
+
           </div>
         </div>
       )}
