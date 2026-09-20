@@ -19,7 +19,12 @@ use Illuminate\Support\Facades\Route;
 Route::get('/assets/{file}', function (string $file) {
     $path = public_path('assets/' . $file);
     if (!file_exists($path)) {
-        abort(404);
+        $alt = base_path('assets/' . $file);
+        if (file_exists($alt)) {
+            $path = $alt;
+        } else {
+            abort(404);
+        }
     }
     $mime = str_ends_with($file, '.css')
         ? 'text/css'
