@@ -26,15 +26,27 @@ if (fs.existsSync(manifestSrc)) {
   fs.copyFileSync(manifestSrc, manifestDest);
   fs.copyFileSync(manifestSrc, manifestRootDest);
   console.log('Copied admin manifest to', manifestDest, 'and', manifestRootDest);
+} else if (fs.existsSync(manifestDest)) {
+  fs.copyFileSync(manifestDest, manifestRootDest);
+  console.log('Mirrored manifest to', manifestRootDest);
 }
 
 // Copy assets
 const assetsSrc = path.join(adminDist, 'assets');
-if (fs.existsSync(assetsSrc)) {
-  const files = fs.readdirSync(assetsSrc);
+const sourceDir = fs.existsSync(assetsSrc) ? assetsSrc : publicAssets;
+if (fs.existsSync(sourceDir)) {
+  const files = fs.readdirSync(sourceDir);
   for (const file of files) {
-    fs.copyFileSync(path.join(assetsSrc, file), path.join(publicAssets, file));
-    fs.copyFileSync(path.join(assetsSrc, file), path.join(rootAssets, file));
-    console.log('Copied asset:', file);
+    const srcFile = path.join(sourceDir, file);
+    if (!fs.statSync(srcFile).isFile()) continue;
+    const destPublic = path.join(publicAssets, file);
+    const destRoot = path.join(rootAssets, file);
+    if (srcFile !== destPublic) {
+      fs.copyFileSync(srcFile, destPublic);
+    }
+    if (srcFile !== destRoot) {
+      fs.copyFileSync(srcFile, destRoot);
+    }
+    console.log('Synced asset:', file);
   }
 }

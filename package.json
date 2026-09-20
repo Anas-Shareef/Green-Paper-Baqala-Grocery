@@ -3,7 +3,8 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "npm --prefix admin run build && node scripts/sync-admin-assets.js",
+        "build": "node scripts/sync-admin-assets.js",
+        "build:admin": "npm --prefix admin run build && node scripts/sync-admin-assets.js",
         "dev": "npm --prefix admin run dev"
     },
     "devDependencies": {
