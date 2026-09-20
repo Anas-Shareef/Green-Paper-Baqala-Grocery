@@ -42,11 +42,17 @@ export default function App() {
         <Route path="/receiving" element={<ProtectedRoute><ReceivingPage /></ProtectedRoute>} />
         <Route path="/admin/receiving" element={<ProtectedRoute><ReceivingPage /></ProtectedRoute>} />
         <Route path="/orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
+        <Route path="/admin/orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
         <Route path="/customers" element={<ProtectedRoute><CustomersPage /></ProtectedRoute>} />
+        <Route path="/admin/customers" element={<ProtectedRoute><CustomersPage /></ProtectedRoute>} />
         <Route path="/expenses" element={<ProtectedRoute><ExpensesPage /></ProtectedRoute>} />
+        <Route path="/admin/expenses" element={<ProtectedRoute><ExpensesPage /></ProtectedRoute>} />
         <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
+        <Route path="/admin/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
+        <Route path="/admin/products" element={<ProtectedRoute><ProductsPage /></ProtectedRoute>} />
+        <Route path="/admin/categories" element={<ProtectedRoute><CategoriesPage /></ProtectedRoute>} />
 
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/admin/inventory" replace />} />
       </Routes>
     </BrowserRouter>
   );

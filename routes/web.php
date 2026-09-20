@@ -57,21 +57,62 @@ Route::post('/logout', function () {
 
 // Main Admin & POS Routes
 Route::middleware(['auth'])->group(function () {
-    Route::get('/admin/dashboard', Dashboard::class)->name('admin.dashboard');
+    Route::get('/admin/dashboard', function (\Illuminate\Http\Request $request) {
+        if ($request->query('legacy') === 'livewire') {
+            return (new \App\Livewire\Admin\Dashboard())();
+        }
+        return view('admin-react');
+    })->name('admin.dashboard');
+
     Route::get('/pos', PosScreen::class)->name('pos');
+
     Route::get('/admin/inventory', function (\Illuminate\Http\Request $request) {
         if ($request->query('legacy') === 'livewire') {
             return (new \App\Livewire\Admin\Inventory())();
         }
         return view('admin-react');
     })->name('admin.inventory');
-    Route::get('/admin/receiving', StockReceiving::class)->name('admin.receiving');
-    Route::get('/admin/customers', Customers::class)->name('admin.customers');
-    Route::get('/admin/orders', Orders::class)->name('admin.orders');
+
+    Route::get('/admin/receiving', function (\Illuminate\Http\Request $request) {
+        if ($request->query('legacy') === 'livewire') {
+            return (new \App\Livewire\Admin\StockReceiving())();
+        }
+        return view('admin-react');
+    })->name('admin.receiving');
+
+    Route::get('/admin/customers', function (\Illuminate\Http\Request $request) {
+        if ($request->query('legacy') === 'livewire') {
+            return (new \App\Livewire\Admin\Customers())();
+        }
+        return view('admin-react');
+    })->name('admin.customers');
+
+    Route::get('/admin/orders', function (\Illuminate\Http\Request $request) {
+        if ($request->query('legacy') === 'livewire') {
+            return (new \App\Livewire\Admin\Orders())();
+        }
+        return view('admin-react');
+    })->name('admin.orders');
+
     Route::get('/admin/whatsapp', WhatsApp::class)->name('admin.whatsapp');
-    Route::get('/admin/expenses', Expenses::class)->name('admin.expenses');
-    Route::get('/admin/reports', Reports::class)->name('admin.reports');
+
+    Route::get('/admin/expenses', function (\Illuminate\Http\Request $request) {
+        if ($request->query('legacy') === 'livewire') {
+            return (new \App\Livewire\Admin\Expenses())();
+        }
+        return view('admin-react');
+    })->name('admin.expenses');
+
+    Route::get('/admin/reports', function (\Illuminate\Http\Request $request) {
+        if ($request->query('legacy') === 'livewire') {
+            return (new \App\Livewire\Admin\Reports())();
+        }
+        return view('admin-react');
+    })->name('admin.reports');
+
     Route::get('/admin/settings', Settings::class)->name('admin.settings');
+    Route::get('/admin/products', function () { return view('admin-react'); });
+    Route::get('/admin/categories', function () { return view('admin-react'); });
 });
 
 // Download PDF Invoice Receipt

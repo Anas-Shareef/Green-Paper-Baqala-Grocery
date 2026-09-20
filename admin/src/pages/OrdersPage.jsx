@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ShoppingBag, Eye, RefreshCw, MessageCircle, Copy, Check, CheckCircle, Download, Upload, FileSpreadsheet, AlertCircle, X, CheckCircle2, FileText } from 'lucide-react';
+import { ShoppingBag, Eye, RefreshCw, MessageCircle, Copy, Check, CheckCircle, Download, Upload, FileSpreadsheet, AlertCircle, X, CheckCircle2, FileText, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { adminApi } from '../services/api';
 import { useAdminRealtime } from '../context/AdminRealtimeContext';
 
@@ -7,6 +7,14 @@ export function OrdersPage() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedStatus, setSelectedStatus] = useState('');
+  const [selectedPaymentStatus, setSelectedPaymentStatus] = useState('');
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(25);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
   const [activeOrder, setActiveOrder] = useState(null);
   const [copied, setCopied] = useState(false);
 
@@ -20,12 +28,37 @@ export function OrdersPage() {
 
   const { refreshRealtime } = useAdminRealtime();
 
+  // Debounce search input (350ms)
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 350);
+    return () => clearTimeout(handler);
+  }, [search]);
+
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const res = await adminApi.getOrders({ status: selectedStatus });
+      const res = await adminApi.getOrders({
+        status: selectedStatus || undefined,
+        payment_status: selectedPaymentStatus || undefined,
+        q: debouncedSearch || undefined,
+        page,
+        per_page: perPage,
+      });
+
       if (res && res.data) {
-        setOrders(res.data.data || res.data);
+        if (Array.isArray(res.data.data)) {
+          setOrders(res.data.data);
+          const meta = res.data.meta || res.data;
+          setTotalOrders(meta.total || res.data.data.length);
+          setTotalPages(meta.last_page || Math.ceil((meta.total || res.data.data.length) / perPage) || 1);
+        } else if (Array.isArray(res.data)) {
+          setOrders(res.data);
+          setTotalOrders(res.data.length);
+          setTotalPages(1);
+        }
       }
     } catch (e) {
       console.error(e);
@@ -36,7 +69,7 @@ export function OrdersPage() {
 
   useEffect(() => {
     fetchOrders();
-  }, [selectedStatus]);
+  }, [selectedStatus, selectedPaymentStatus, debouncedSearch, page, perPage]);
 
   const handleUpdateStatus = async (orderId, newStatus) => {
     try {
@@ -159,15 +192,27 @@ export function OrdersPage() {
           <p className="text-xs text-slate-500 mt-1">Automatic order entry, WhatsApp confirmation & delivery fulfillment</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button onClick={fetchOrders} className="p-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-colors">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Debounced Search */}
+          <div className="relative w-full sm:w-64">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search order #, customer, villa..."
+              className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-emerald-600 shadow-xs"
+            />
+          </div>
+
+          <button onClick={fetchOrders} className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-colors">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
           
           <select
             value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value)}
-            className="px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600 shadow-xs"
+            onChange={(e) => { setSelectedStatus(e.target.value); setPage(1); }}
+            className="px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600 shadow-xs"
           >
             <option value="">All Order Statuses</option>
             <option value="pending">Pending</option>
@@ -178,13 +223,24 @@ export function OrdersPage() {
             <option value="cancelled">Cancelled</option>
           </select>
 
+          <select
+            value={selectedPaymentStatus}
+            onChange={(e) => { setSelectedPaymentStatus(e.target.value); setPage(1); }}
+            className="px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-600 shadow-xs"
+          >
+            <option value="">All Payments</option>
+            <option value="paid">Paid</option>
+            <option value="pending">Unpaid / Pending</option>
+            <option value="cod">Cash on Delivery</option>
+          </select>
+
           {/* Export & Import side by side */}
           <div className="flex items-center gap-2">
             <a
-              href={adminApi.getOrderExportUrl({ status: selectedStatus })}
+              href={adminApi.getOrderExportUrl({ status: selectedStatus, payment_status: selectedPaymentStatus, q: debouncedSearch })}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition-all shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition-all shadow-xs"
             >
               <Download className="w-4 h-4 text-slate-500" />
               <span>Export</span>
@@ -198,7 +254,7 @@ export function OrdersPage() {
                 setImportSuccess(null);
                 setImportError(null);
               }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition-all shadow-xs"
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition-all shadow-xs"
             >
               <Upload className="w-4 h-4 text-slate-500" />
               <span>Import</span>
@@ -295,6 +351,48 @@ export function OrdersPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Server-side Pagination Controls */}
+        <div className="p-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 font-medium bg-slate-50/50">
+          <div className="flex items-center gap-2">
+            <span>Showing {orders.length} of {totalOrders} orders</span>
+            <span className="text-slate-300">|</span>
+            <span className="flex items-center gap-1.5">
+              <span>Rows:</span>
+              <select
+                value={perPage}
+                onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1); }}
+                className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 focus:outline-none"
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page <= 1 || loading}
+              className="px-3 py-1.5 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed border border-slate-200 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-1 transition-all shadow-2xs"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" /> Prev
+            </button>
+
+            <span className="px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl font-bold font-mono text-xs">
+              Page {page} of {totalPages}
+            </span>
+
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages || loading}
+              className="px-3 py-1.5 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed border border-slate-200 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-1 transition-all shadow-2xs"
+            >
+              Next <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
 

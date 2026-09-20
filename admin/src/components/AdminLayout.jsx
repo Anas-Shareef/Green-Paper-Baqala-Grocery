@@ -28,15 +28,15 @@ export function AdminLayout({ children }) {
   } = useAdminRealtime();
 
   const navItems = [
-    { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-    { label: 'Products', icon: Package, path: '/products' },
-    { label: 'Categories', icon: Tags, path: '/categories' },
-    { label: 'Inventory', icon: Warehouse, path: '/inventory' },
-    { label: 'Stock Receiving', icon: Scan, path: '/receiving' },
-    { label: 'Orders', icon: ShoppingBag, path: '/orders' },
-    { label: 'Customers', icon: Users, path: '/customers' },
-    { label: 'Expenses', icon: Receipt, path: '/expenses' },
-    { label: 'Reports', icon: BarChart3, path: '/reports' },
+    { label: 'Inventory', icon: Warehouse, path: '/admin/inventory' },
+    { label: 'Orders', icon: ShoppingBag, path: '/admin/orders' },
+    { label: 'Stock Receiving', icon: Scan, path: '/admin/receiving' },
+    { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
+    { label: 'Products', icon: Package, path: '/admin/products' },
+    { label: 'Categories', icon: Tags, path: '/admin/categories' },
+    { label: 'Customers', icon: Users, path: '/admin/customers' },
+    { label: 'Expenses', icon: Receipt, path: '/admin/expenses' },
+    { label: 'Reports', icon: BarChart3, path: '/admin/reports' },
   ];
 
   const handleLogout = async () => {
@@ -54,7 +54,7 @@ export function AdminLayout({ children }) {
       {/* Sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 transform ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform duration-200 ease-in-out flex flex-col shadow-xs`}>
         <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-          <Link to="/dashboard" className="flex items-center gap-3">
+          <Link to="/admin/inventory" className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 font-bold">
               <Store className="w-5 h-5" />
             </div>
@@ -70,7 +70,10 @@ export function AdminLayout({ children }) {
 
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
-            const isActive = location.pathname === item.path;
+            const currentPath = location.pathname;
+            const isActive = currentPath === item.path || 
+                             currentPath === item.path.replace('/admin', '') ||
+                             (item.path !== '/admin/dashboard' && currentPath.startsWith(item.path));
             const Icon = item.icon;
             return (
               <Link
@@ -195,7 +198,7 @@ export function AdminLayout({ children }) {
                             onClick={() => {
                               markNotificationRead(n.id);
                               setNotifDropdownOpen(false);
-                              navigate('/orders');
+                              navigate('/admin/orders');
                             }}
                             className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[10px] uppercase tracking-wider shrink-0 transition-colors"
                           >
@@ -250,7 +253,7 @@ export function AdminLayout({ children }) {
             <button
               onClick={() => {
                 setToastNotification(null);
-                navigate('/orders');
+                navigate('/admin/orders');
               }}
               className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-sm text-center transition-colors"
             >
